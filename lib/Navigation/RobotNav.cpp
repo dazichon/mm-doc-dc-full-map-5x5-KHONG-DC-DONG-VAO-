@@ -28,7 +28,7 @@ RobotNav::RobotNav()
   centerOffset = 25.0f; // 171.0f - 146.0f = 25.0f
   wallThreshold = 230; // Khoảng cách < 230mm là có tường, > 230mm là cửa trống
   frontStopDist = 123; // Phanh dừng khi cách tường trước <= 123mm (tâm ô thực tế là 121mm)
-  frontWallDist = 240; // dF <= 240mm: có tường trước của Ô PHÍA TRƯỚC (vùng 220-240mm)
+  frontWallDist = 360; // dF <= 360mm: có tường trước của Ô PHÍA TRƯỚC (~300mm)
 
   // Giá trị cảm biến lọc & Vùng chết tâm ô
   smoothDL = 171.0f;
@@ -61,7 +61,7 @@ RobotNav::RobotNav()
   // Chế Độ 3: Bám Tường Tự Động (Autonomous Wall Follower)
   autoWallFollowActive = false;
   patrolMode = false;
-  sideSampleFrac = 0.26f;
+  sideSampleFrac = 0.30f;
   curWalls = {false, false, false};
   followRightHand = true; // Mặc định ưu tiên luật bàn tay phải
   autoCellCount = 0;
@@ -385,12 +385,9 @@ void RobotNav::updatePIDLoop() {
     stepTraveledPulses = distTraveled;
 
     // Đạt điều kiện dừng khi:
-    // a) Quãng đường trung bình 2 bánh đạt đủ targetPulses
-    // b) HOẶC 1 trong 2 bánh đạt đủ targetPulses (phòng ngừa 1 bánh trượt/lỗi encoder)
-    // c) HOẶC timeout an toàn 4.5 giây phòng ngừa xe chạy vô tận
-    bool pulseReached = (distTraveled >= stepTargetPulses) ||
-                        (distL >= stepTargetPulses) ||
-                        (distR >= stepTargetPulses);
+    // a) Quãng đường trung bình 2 bánh đạt đủ targetPulses (loại bỏ trường hợp 1 bánh quay nhanh khi bẻ lái làm dừng sớm)
+    // b) HOẶC timeout an toàn 4.5 giây phòng ngừa xe chạy vô tận
+    bool pulseReached = (distTraveled >= stepTargetPulses);
     bool timeoutSafe = (millis() - stepStartTime > 4500);
 
     if (pulseReached || timeoutSafe) {
@@ -445,12 +442,19 @@ void RobotNav::updatePIDLoop() {
     pidOut = gyroPID.computeError(straightError, dt);
   }
 
-  // 4. Xuất PWM cho 2 bánh
-  int leftSpeed = baseForwardSpeed - (int)pidOut;
-  int rightSpeed = baseForwardSpeed + (int)pidOut;
+  // 4. Xuất PWM cho 2 bánh có giảm tốc 2 giai đoạn (Profile Deceleration):
+  // - 0% -> 70% quãng đường ô: chạy tốc độ baseForwardSpeed tiêu chuẩn
+  // - 70% -> 100% quãng đường ô: hãm về tốc độ bò (crawl speed ~46 PWM) để khi ngắt động cơ xe dừng dứt điểm, không trượt quán tính
+  int activeBaseSpeed = baseForwardSpeed;
+  if (stepCellActive && stepTraveledPulses >= (long)(0.70f * stepTargetPulses)) {
+    activeBaseSpeed = 46;
+  }
 
-  leftSpeed = constrain(leftSpeed, 40, 255);
-  rightSpeed = constrain(rightSpeed, 40, 255);
+  int leftSpeed = activeBaseSpeed - (int)pidOut;
+  int rightSpeed = activeBaseSpeed + (int)pidOut;
+
+  leftSpeed = constrain(leftSpeed, 35, 255);
+  rightSpeed = constrain(rightSpeed, 35, 255);
 
   currentLeftSpeed = leftSpeed;
   currentRightSpeed = rightSpeed;
@@ -494,19 +498,33 @@ void RobotNav::update() {
 WallStatus RobotNav::senseCurrentWalls() {
   updateSensors();
   WallStatus walls;
-  // Tường sát xe (dF <= frontStopDist + 10): vách trước của ô hiện tại
-  walls.hasFrontNear = frontReady && smoothDF > 20.0f && smoothDF <= (float)(frontStopDist + 10);
-  // Tường trước (dF <= frontWallDist): vách trước của Ô PHÍA TRƯỚC
-  walls.hasFront = !walls.hasFrontNear && frontReady && smoothDF > 20.0f && smoothDF <= (float)frontWallDist;
-  walls.hasLeft  = (leftReady && smoothDL > 20.0f && smoothDL < (float)wallThreshold);
-  walls.hasRight = (rightReady && smoothDR > 20.0f && smoothDR < (float)wallThreshold);
+  // Tường sát xe (smoothDF <= 180mm): vách trước của ô hiện tại
+  walls.hasFrontNear = frontReady && smoothDF > 20.0f && smoothDF <= 180.0f;
+  // Tường trước của ô tiếp theo (180mm < smoothDF <= frontWallDist): vách trước của Ô PHÍA TRƯỚC
+  walls.hasFront = !walls.hasFrontNear && frontReady && smoothDF > 180.0f && smoothDF <= (float)frontWallDist;
+
+  if (walls.hasFrontNear) {
+    // KHI BỊ CHẮN TƯỜNG TRƯỚC SÁT XE:
+    // Cảm biến 45° chĩa ra trước sẽ phản xạ từ vách trước ở cự ly ~ smoothDF * 1.414.
+    // Cần loại trừ phản xạ này để không nhận diện nhầm cửa mở/khoảng trống thành tường!
+    float frontDiag = smoothDF * 1.414f;
+    bool leftIsFrontReflection = (fabs(smoothDL - frontDiag) < 32.0f && smoothDL > 125.0f);
+    bool rightIsFrontReflection = (fabs(smoothDR - frontDiag) < 32.0f && smoothDR > 125.0f);
+
+    walls.hasLeft  = leftReady && smoothDL > 20.0f && smoothDL < (float)wallThreshold && !leftIsFrontReflection;
+    walls.hasRight = rightReady && smoothDR > 20.0f && smoothDR < (float)wallThreshold && !rightIsFrontReflection;
+  } else {
+    // 2 Cảm biến 45° chĩa ra trước nhìn 2 bên sườn ô phía trước:
+    walls.hasLeft  = (leftReady && smoothDL > 20.0f && smoothDL < (float)wallThreshold);
+    walls.hasRight = (rightReady && smoothDR > 20.0f && smoothDR < (float)wallThreshold);
+  }
   return walls;
 }
 
 void RobotNav::reportCell(char act, const WallStatus &w, const WallStatus *pre) {
   // Gói JSON cho bản đồ trên Dashboard: act = F/L/R/B (đã di chuyển) hoặc S (chỉ đọc vách)
   // Cảm biến nhìn trước 1 ô: wf/wl/wr = vách của Ô PHÍA TRƯỚC xe;
-  // pf/pl/pr (nếu có) = vách của ô vừa bước vào (đọc trước khi di chuyển)
+  // pf/pl/pr (nếu có) = vách của chính ô vừa bước vào
   String j = "{\"type\":\"cell\",\"act\":\"" + String(act) + "\"" +
              ",\"wf\":" + String(w.hasFront ? 1 : 0) +
              ",\"wl\":" + String(w.hasLeft ? 1 : 0) +
@@ -533,7 +551,12 @@ WallStatus RobotNav::moveOneCell(char turn) {
   stepCell(1); // Kích hoạt PID bám tường và đặt mục tiêu đúng 1 ô (pulsesPerCell xung)
 
   unsigned long startTime = millis();
-  bool sampled = false, sampLeft = false, sampRight = false;
+
+  // Thu thập mẫu vách hông liên tục trong cửa sổ [28% .. 75%] của ô
+  int leftOpenCount = 0;
+  int leftWallCount = 0;
+  int rightOpenCount = 0;
+  int rightWallCount = 0;
 
   while (stepCellActive && (millis() - startTime < 6000)) {
     updateSensors();
@@ -541,16 +564,30 @@ WallStatus RobotNav::moveOneCell(char turn) {
       mpu6050.update();
     }
 
-    // Lấy mẫu vách hông của Ô ĐÍCH: lúc này cảm biến xiên đang nhìn đúng giữa ô đích
-    if (!sampled && stepTraveledPulses >= (long)(sideSampleFrac * pulsesPerCell)) {
-      sampled = true;
-      sampLeft = leftReady && smoothDL > 20.0f && smoothDL < (float)wallThreshold;
-      sampRight = rightReady && smoothDR > 20.0f && smoothDR < (float)wallThreshold;
+    // Cửa sổ nhận diện vách hông [28% .. 75%]:
+    // - Đã vượt qua trụ góc và vách của ô cũ (>28%)
+    // - Chưa bị ảnh hưởng bởi phản xạ tường trước (<75%)
+    if (stepTraveledPulses >= (long)(sideSampleFrac * pulsesPerCell) &&
+        stepTraveledPulses <= (long)(0.75f * pulsesPerCell)) {
+      if (leftReady) {
+        if (smoothDL > 215.0f) {
+          leftOpenCount++;
+        } else if (smoothDL > 20.0f && smoothDL < (float)wallThreshold) {
+          leftWallCount++;
+        }
+      }
+      if (rightReady) {
+        if (smoothDR > 215.0f) {
+          rightOpenCount++;
+        } else if (smoothDR > 20.0f && smoothDR < (float)wallThreshold) {
+          rightWallCount++;
+        }
+      }
     }
 
     // updatePIDLoop() tự động kiểm tra:
     // a) Chạm vách trước (dF <= frontStopDist)
-    // b) Đạt đủ pulsesPerCell (4400 xung)
+    // b) Đạt đủ pulsesPerCell (pulsesPerCell xung)
     // và sẽ tự phanh dừng, tắt stepCellActive!
     updatePIDLoop();
     delay(2);
@@ -562,21 +599,41 @@ WallStatus RobotNav::moveOneCell(char turn) {
   autoWallFollowActive = keepAuto; // stopPID() (kể cả trong updatePIDLoop) tắt cờ tự động -> khôi phục
   delay(50);
 
-  // Đã dừng ở tâm ô mới -> đọc vách của CHÍNH ô này (không dùng dữ liệu lúc đang chạy)
-  WallStatus status = senseCurrentWalls(); // vách trước: đọc tại tâm ô
-  if (sampled) { // vách hông: dùng mẫu lấy khi xe còn đang tiến vào ô
-    status.hasLeft = sampLeft;
-    status.hasRight = sampRight;
-  }
-  curWalls = status;
+  // Đã dừng ở tâm ô mới -> đọc vách của ô kế tiếp phía trước (look-ahead)
+  WallStatus status = senseCurrentWalls();
 
-  String resMsg = ">> [ATOMIC] DA DEN TAM O MOI! Vach: Truoc=" + String(status.hasFront ? "CO" : "TRONG") +
+  // Vách của chính ô hiện tại:
+  // Ưu tiên kết quả thống kê liên tục trong cửa sổ [28% .. 75%] lúc xe đang lướt qua thân ô
+  WallStatus curCellWalls;
+  if (leftOpenCount + leftWallCount >= 2) {
+    // Có khoảng trống nếu số lần đọc cửa mở >= 2 hoặc tỷ lệ mở >= tường
+    curCellWalls.hasLeft = (leftOpenCount >= 2 && leftOpenCount >= leftWallCount) ? false : (leftWallCount > leftOpenCount);
+  } else {
+    curCellWalls.hasLeft = status.hasLeft;
+  }
+
+  if (rightOpenCount + rightWallCount >= 2) {
+    curCellWalls.hasRight = (rightOpenCount >= 2 && rightOpenCount >= rightWallCount) ? false : (rightWallCount > rightOpenCount);
+  } else {
+    curCellWalls.hasRight = status.hasRight;
+  }
+
+  curCellWalls.hasFront = status.hasFrontNear;
+  curCellWalls.hasFrontNear = status.hasFrontNear;
+  curWalls = curCellWalls;
+
+  String resMsg = ">> [ATOMIC] DA DEN TAM O MOI! O ke tiep: Truoc=" + String(status.hasFront ? "CO" : "TRONG") +
                   " | Trai=" + String(status.hasLeft ? "CO" : "TRONG") +
                   " | Phai=" + String(status.hasRight ? "CO" : "TRONG") +
+                  " | Vach O nay: Trai=" + String(curCellWalls.hasLeft ? "CO" : "TRONG") +
+                  " (Open:" + String(leftOpenCount) + "/Wall:" + String(leftWallCount) + ")" +
+                  ", Phai=" + String(curCellWalls.hasRight ? "CO" : "TRONG") +
+                  " (Open:" + String(rightOpenCount) + "/Wall:" + String(rightWallCount) + ")" +
+                  ", Truoc=" + String(curCellWalls.hasFront ? "CO" : "TRONG") +
                   " | Xung: " + String(stepTraveledPulses);
   Serial.println(resMsg);
   bleManager.println(resMsg);
-  reportCell(turn, status, &preWalls);
+  reportCell(turn, status, &curCellWalls);
 
   return status;
 }
@@ -781,10 +838,9 @@ void RobotNav::startFloodFill(uint8_t mode) {
 
   if (!ffMaze.cell(ffX, ffY).run_visited) {
     WallStatus ws = senseCurrentWalls(); // vách của ô phía trước
-    if (startCellFresh) { // ô xuất phát: tường trái, phải và sau chắc chắn có
+    if (startCellFresh) { // ô xuất phát: mặc định chỉ có 2 tường bên
       ffSetWall(ffMaze, ffX, ffY, (ffH + 3) % 4, true);
       ffSetWall(ffMaze, ffX, ffY, (ffH + 1) % 4, true);
-      ffSetWall(ffMaze, ffX, ffY, (ffH + 2) % 4, true);
       ffMaze.cell(ffX, ffY).known = true;
     }
     ffMaze.cell(ffX, ffY).run_visited = true;
@@ -892,12 +948,11 @@ void RobotNav::stepFloodFill() {
   ffH = dir;
   ffX = next.x;
   ffY = next.y;
-  // preWalls = vách ô vừa bước vào (đọc trước khi đi); ws = vách ô phía trước mới
-  // preWalls.hasFront là vách trước của ô cũ (đã đi qua -> trống), chỉ dùng vách hông
+  // Cửa xe vừa bước qua luôn thông
   ffSetWall(ffMaze, ffX, ffY, (ffH + 2) % 4, false);
   if (!ffMaze.cell(ffX, ffY).known) {
-    ffSetWall(ffMaze, ffX, ffY, (ffH + 3) % 4, preWalls.hasLeft);
-    ffSetWall(ffMaze, ffX, ffY, (ffH + 1) % 4, preWalls.hasRight);
+    ffSetWall(ffMaze, ffX, ffY, (ffH + 3) % 4, curWalls.hasLeft);
+    ffSetWall(ffMaze, ffX, ffY, (ffH + 1) % 4, curWalls.hasRight);
     ffMaze.cell(ffX, ffY).known = true;
   }
   ffMaze.cell(ffX, ffY).run_visited = true;

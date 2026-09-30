@@ -1823,12 +1823,12 @@
         const DIR_ARROW = ['↑', '→', '↓', '←'];
         const MAP_DEFAULT_CFG = { cols: 8, rows: 8, zoom: 64, corner: 'BL', trail: true, gx: 7, gy: 7 };
 
-        // Ô xuất phát (0,0): có tường trái, phải và sau THEO HƯỚNG XE ban đầu h, phía trước để trống
+        // Ô xuất phát (0,0): mặc định CHỈ CÓ 2 TƯỜNG BÊN THEO HƯỚNG XE ban đầu h (trái và phải)
         function mapStartWalls(h) {
             const w0 = {};
-            w0[edgeKey(0, 0, (h + 3) % 4)] = 1;
-            w0[edgeKey(0, 0, (h + 1) % 4)] = 1;
-            w0[edgeKey(0, 0, (h + 2) % 4)] = 1;
+            w0[edgeKey(0, 0, (h + 3) % 4)] = 1; // Vách trái ô (0,0)
+            w0[edgeKey(0, 0, (h + 1) % 4)] = 1; // Vách phải ô (0,0)
+            // Mặc định chỉ có 2 tường bên ở (0,0), không có tường sau
             return w0;
         }
 
@@ -1869,22 +1869,41 @@
                 if (mapState.trail.length > 1000) mapState.trail.shift();
             }
             const h = mapState.h;
-            mapState.cells[`${mapState.x},${mapState.y}`] = 1;
-            // pl/pr: vách hông ô vừa bước vào (đọc trước khi đi). pf là vách trước của ô cũ -> xe vừa đi qua nên trống
-            if (pf !== undefined) {
-                mapState.walls[edgeKey(mapState.x, mapState.y, (h + 2) % 4)] = 0;
-                mapState.walls[edgeKey(mapState.x, mapState.y, (h + 3) % 4)] = pl ? 1 : 0;
-                mapState.walls[edgeKey(mapState.x, mapState.y, (h + 1) % 4)] = pr ? 1 : 0;
+            const x = mapState.x, y = mapState.y;
+            mapState.cells[`${x},${y}`] = 1;
+
+            // 1. Cập nhật vách ô hiện tại (x, y):
+            // Nếu xe vừa di chuyển vào ô này (act !== 'S'), vách sau xe (cửa vừa đi qua từ ô trước) chắc chắn thông
+            if (act !== 'S') {
+                mapState.walls[edgeKey(x, y, (h + 2) % 4)] = 0;
             }
-            // wn: tường sát xe -> vách trước của ô hiện tại
-            mapState.walls[edgeKey(mapState.x, mapState.y, h)] = wn ? 1 : 0;
-            // Cảm biến nhìn trước 1 ô: wf/wl/wr là vách của Ô PHÍA TRƯỚC xe (không phải ô hiện tại)
+            // Vách hông của chính ô hiện tại:
+            if (x === 0 && y === 0 && act === 'S') {
+                // Ô xuất phát (0,0) mặc định luôn có 2 tường bên
+                mapState.walls[edgeKey(0, 0, (h + 3) % 4)] = 1;
+                mapState.walls[edgeKey(0, 0, (h + 1) % 4)] = 1;
+            } else if (pl !== undefined && pr !== undefined) {
+                // Vách hông ô hiện tại được robot gửi kèm (lấy mẫu chuẩn khi vào ô)
+                mapState.walls[edgeKey(x, y, (h + 3) % 4)] = pl ? 1 : 0;
+                mapState.walls[edgeKey(x, y, (h + 1) % 4)] = pr ? 1 : 0;
+            }
+            // Vách trước của chính ô hiện tại (tường sát ngay mũi xe)
+            mapState.walls[edgeKey(x, y, h)] = wn ? 1 : 0;
+
+            // 2. CẬP NHẬT TƯƠNG LAI (NHÌN TRƯỚC 1 Ô ax, ay):
+            // Cảm biến 45° chĩa ra trước nên quét vách của ô phía trước (ax, ay)
             if (!wn) {
-                const ax = mapState.x + DIR_DX[h], ay = mapState.y + DIR_DY[h];
+                const ax = x + DIR_DX[h], ay = y + DIR_DY[h];
+                // Cửa thông giữa (x, y) và (ax, ay)
+                mapState.walls[edgeKey(x, y, h)] = 0;
+                // Vách trước của ô phía trước (đo bởi cảm biến ToF trước tầm xa)
                 mapState.walls[edgeKey(ax, ay, h)] = wf ? 1 : 0;
+                // Vách trái ô phía trước: 1 = có tường, 0 = mở đường rẽ trái!
                 mapState.walls[edgeKey(ax, ay, (h + 3) % 4)] = wl ? 1 : 0;
+                // Vách phải ô phía trước: 1 = có tường, 0 = mở đường rẽ phải!
                 mapState.walls[edgeKey(ax, ay, (h + 1) % 4)] = wr ? 1 : 0;
             }
+
             mapState.last = labels[act] || act;
             mapSave();
             mapDraw();
@@ -2499,9 +2518,28 @@
                     };
                     upd('L', data.l, data.l > 20 && data.l < wth, false, 300);
                     upd('R', data.r, data.r > 20 && data.r < wth, false, 300);
-                    upd('F', data.f, data.f > 20 && data.f <= fst + 10, data.f > 20 && data.f <= fst, 250);
+                    upd('F', data.f, data.f > 20 && data.f <= 180, data.f > 20 && data.f <= fst, 250);
                     const w1 = document.getElementById('m5Wth'); if (w1) w1.textContent = wth;
                     const w2 = document.getElementById('m5Fstop'); if (w2) w2.textContent = fst;
+
+                    // Cập nhật nhìn trước thời gian thực khi xe đang đứng yên (Live Look-ahead)
+                    if (!stepCellRunning && typeof mapState !== 'undefined' && typeof edgeKey === 'function') {
+                        const h = mapState.h;
+                        const x = mapState.x, y = mapState.y;
+                        const wn = (data.f > 20 && data.f <= 180);
+                        const wf = (!wn && data.f > 180 && data.f <= 360);
+                        const wl = (data.l > 20 && data.l < wth);
+                        const wr = (data.r > 20 && data.r < wth);
+                        mapState.walls[edgeKey(x, y, h)] = wn ? 1 : 0;
+                        if (!wn) {
+                            const ax = x + DIR_DX[h], ay = y + DIR_DY[h];
+                            mapState.walls[edgeKey(x, y, h)] = 0;
+                            mapState.walls[edgeKey(ax, ay, h)] = wf ? 1 : 0;
+                            mapState.walls[edgeKey(ax, ay, (h + 3) % 4)] = wl ? 1 : 0;
+                            mapState.walls[edgeKey(ax, ay, (h + 1) % 4)] = wr ? 1 : 0;
+                        }
+                        if (typeof mapDraw === 'function') mapDraw();
+                    }
                 }
 
                 if (data.auto3 !== undefined) {

@@ -120,12 +120,26 @@ void CommandHandler::processBLECommands() {
   } else if (cmd == "FF_OFF") {
     robotNav.stopFloodFill();
   } else if (cmd.startsWith("SET_GOAL=")) {
-    int comma = cmd.indexOf(',');
-    int gx = cmd.substring(9, comma).toInt();
-    int gy = cmd.substring(comma + 1).toInt();
-    if (comma > 0 && gx >= 0 && gx < MAZE_SIZE && gy >= 0 && gy < MAZE_SIZE) {
+    // SET_GOAL=x,y[,size] -> (x,y) là góc dưới trái vùng đích, size = 1 hoặc 2 (2x2)
+    int c1 = cmd.indexOf(',');
+    int c2 = cmd.indexOf(',', c1 + 1);
+    int gx = cmd.substring(9, c1).toInt();
+    int gy = cmd.substring(c1 + 1, c2 > 0 ? c2 : cmd.length()).toInt();
+    int gs = c2 > 0 ? constrain(cmd.substring(c2 + 1).toInt(), 1, 2) : 1;
+    if (c1 > 0 && gx >= 0 && gx + gs <= MAZE_SIZE && gy >= 0 && gy + gs <= MAZE_SIZE) {
       robotNav.ffGoal = {(int8_t)gx, (int8_t)gy};
-      bleManager.println(">> [BLE] DICH FLOOD-FILL = (" + String(gx) + "," + String(gy) + ")");
+      robotNav.ffGoalSize = gs;
+      bleManager.println(">> [BLE] DICH FLOOD-FILL = (" + String(gx) + "," + String(gy) + ") " +
+                         String(gs) + "x" + String(gs));
+    }
+  } else if (cmd.startsWith("SET_SIZE=")) {
+    // SET_SIZE=cols,rows -> kích thước mê cung thật; áp dụng ở lần SET_POS/xoá map kế tiếp
+    int c1 = cmd.indexOf(',');
+    int cs = cmd.substring(9, c1).toInt(), rs = cmd.substring(c1 + 1).toInt();
+    if (c1 > 0 && cs >= 1 && cs <= MAZE_SIZE && rs >= 1 && rs <= MAZE_SIZE) {
+      robotNav.ffCols = cs;
+      robotNav.ffRows = rs;
+      bleManager.println(">> [BLE] KICH THUOC ME CUNG = " + String(cs) + "x" + String(rs));
     }
   } else if (cmd.startsWith("SET_POS=")) {
     // SET_POS=x,y,h -> xoá bản đồ flood-fill, đặt xe tại (x,y) hướng h (0=N 1=E 2=S 3=W)
@@ -292,7 +306,8 @@ void CommandHandler::sendTelemetry() {
         ",\"ffon\":" + String(robotNav.ffActive ? "true" : "false") +
         ",\"ffx\":" + String(robotNav.ffX) + ",\"ffy\":" + String(robotNav.ffY) +
         ",\"ffh\":" + String(robotNav.ffH) +
-        ",\"fgx\":" + String(robotNav.ffGoal.x) + ",\"fgy\":" + String(robotNav.ffGoal.y) + "}";
+        ",\"fgx\":" + String(robotNav.ffGoal.x) + ",\"fgy\":" + String(robotNav.ffGoal.y) +
+        ",\"fgs\":" + String(robotNav.ffGoalSize) + "}";
     bleManager.println(jsonMsg);
   }
 }

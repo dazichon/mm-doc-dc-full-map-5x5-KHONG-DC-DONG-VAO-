@@ -1475,18 +1475,34 @@
                             <div class="card-title">🧠 Tự Động Flood-fill</div>
                             <span class="map-chip" id="ffStatusChip">DỪNG</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-                            <span class="param-title">Ô đích (x, y):</span>
-                            <input type="number" id="ffGoalX" min="0" max="15" value="7" class="map-select" style="width:64px;" onchange="ffGoalChanged()">
-                            <input type="number" id="ffGoalY" min="0" max="15" value="7" class="map-select" style="width:64px;" onchange="ffGoalChanged()">
+                        <!-- Đi tới đích: đặt đích + xem số bước + chạy, gom chung 1 khối -->
+                        <div style="border:1px solid rgba(250,204,21,0.35);background:rgba(250,204,21,0.05);border-radius:12px;padding:12px;">
+                            <div style="font-size:12px;font-weight:800;color:#facc15;margin-bottom:10px;">🎯 ĐI TỚI ĐÍCH</div>
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                                <span class="param-title">Ô đích x</span>
+                                <input type="number" id="ffGoalX" min="0" max="15" value="7" class="map-select" style="width:58px;" onchange="ffGoalChanged()">
+                                <span class="param-title">y</span>
+                                <input type="number" id="ffGoalY" min="0" max="15" value="7" class="map-select" style="width:58px;" onchange="ffGoalChanged()">
+                                <select id="ffGoalSize" class="map-select" onchange="ffGoalChanged()">
+                                    <option value="1">1×1</option>
+                                    <option value="2">2×2 (trung tâm)</option>
+                                </select>
+                            </div>
+                            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-main);margin-bottom:10px;cursor:pointer;">
+                                <input type="checkbox" id="mapFloodChk" checked onchange="mapSetCfg('flood', this.checked)"> Hiện số bước tới đích trên map
+                            </label>
+                            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+                                Xe còn cách đích: <b id="mapDistText" style="color:#facc15;font-size:15px;">--</b> bước
+                            </div>
+                            <button class="btn-atomic btn-atomic-main" style="padding:12px;font-size:13px;width:100%;" onclick="ffStart(0)">🎯 Đi tới đích</button>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Mẹo: bấm vào 1 ô trên map để đặt đích nhanh.</div>
                         </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                            <button class="btn-atomic btn-atomic-main" style="padding:12px;font-size:13px;" onclick="ffStart(0)">🎯 Đi tới đích</button>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
                             <button class="btn-atomic btn-atomic-sense" onclick="ffStart(1)">🔍 Khám phá hết</button>
+                            <button class="btn-atomic btn-atomic-stop" onclick="sendCmd('FF_OFF'); sendCmd('AUTO_OFF')">🛑 Dừng</button>
                         </div>
-                        <button class="btn-atomic btn-atomic-stop" style="margin-top:10px;" onclick="sendCmd('FF_OFF'); sendCmd('AUTO_OFF')">🛑 Dừng Flood-fill</button>
                         <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.5;">
-                            Xe tự đọc vách, tính floodfill và đi từng ô; map cập nhật theo. Cần chọn ô xuất phát <b>góc dưới trái</b> (toạ độ ≥ 0, tối đa 16×16). Bấm chạy sẽ đồng bộ vị trí và hướng hiện tại của xe trên map sang robot.
+                            Xe tự đọc vách, tính floodfill và đi từng ô; map cập nhật theo. Toạ độ robot tối đa 16×16. Số trong ô = số bước ngắn nhất tới đích (tường chưa biết coi như trống, giống thuật toán trên robot). Bấm chạy sẽ đồng bộ vị trí và hướng hiện tại của xe trên map sang robot.
                         </div>
                     </div>
 
@@ -1821,20 +1837,21 @@
         const DIR_DX = [0, 1, 0, -1];
         const DIR_DY = [1, 0, -1, 0];
         const DIR_ARROW = ['↑', '→', '↓', '←'];
-        const MAP_DEFAULT_CFG = { cols: 8, rows: 8, zoom: 64, corner: 'BL', trail: true, gx: 7, gy: 7 };
+        const MAP_DEFAULT_CFG = { cols: 8, rows: 8, zoom: 64, corner: 'BL', trail: true, gx: 7, gy: 7, gs: 2, flood: true };
+        const FF_N = 16; // kích thước lưới floodfill trên robot (MAZE_SIZE)
 
         // Ô xuất phát (0,0): mặc định CHỈ CÓ 2 TƯỜNG BÊN THEO HƯỚNG XE ban đầu h (trái và phải)
-        function mapStartWalls(h) {
+        function mapStartWalls(h, sx = 0, sy = 0) {
             const w0 = {};
-            w0[edgeKey(0, 0, (h + 3) % 4)] = 1; // Vách trái ô (0,0)
-            w0[edgeKey(0, 0, (h + 1) % 4)] = 1; // Vách phải ô (0,0)
+            w0[edgeKey(sx, sy, (h + 3) % 4)] = 1; // Vách trái ô xuất phát
+            w0[edgeKey(sx, sy, (h + 1) % 4)] = 1; // Vách phải ô xuất phát
             // Mặc định chỉ có 2 tường bên ở (0,0), không có tường sau
             return w0;
         }
 
         function mapNewState(h = 0) {
             const w0 = mapStartWalls(h);
-            return { x: 0, y: 0, h: h, cells: { '0,0': 1 }, walls: w0, trail: [[0, 0]], last: '--', cfg: Object.assign({}, MAP_DEFAULT_CFG) };
+            return { x: 0, y: 0, sx: 0, sy: 0, h: h, cells: { '0,0': 1 }, walls: w0, trail: [[0, 0]], last: '--', cfg: Object.assign({}, MAP_DEFAULT_CFG) };
         }
         let mapState = mapNewState();
         try {
@@ -1844,6 +1861,28 @@
                 mapState.cfg = Object.assign({}, MAP_DEFAULT_CFG, saved.cfg || {});
             }
         } catch (e) {}
+        mapNormalize();
+
+        // Dời toàn bộ map (ô, tường, đường đi, xe, ô xuất phát, đích) sao cho toạ độ nhỏ nhất = 0
+        // -> trục ngang/dọc luôn đánh số từ 0 tăng dần sang dương, không bao giờ âm.
+        function mapNormalize() {
+            const b = mapBounds();
+            const dx = -b.minX, dy = -b.minY;
+            if (!dx && !dy) return false;
+            const mv = k => { const [x, y] = k.split(',').map(Number); return `${x + dx},${y + dy}`; };
+            const cells = {};
+            Object.keys(mapState.cells).forEach(k => { cells[mv(k)] = mapState.cells[k]; });
+            const walls = {};
+            Object.keys(mapState.walls).forEach(k => { walls[k.split('|').map(mv).join('|')] = mapState.walls[k]; });
+            mapState.cells = cells;
+            mapState.walls = walls;
+            mapState.trail = mapState.trail.map(([x, y]) => [x + dx, y + dy]);
+            mapState.x += dx; mapState.y += dy;
+            mapState.sx += dx; mapState.sy += dy;
+            mapState.cfg.gx = Math.min(FF_N - mapState.cfg.gs, mapState.cfg.gx + dx);
+            mapState.cfg.gy = Math.min(FF_N - mapState.cfg.gs, mapState.cfg.gy + dy);
+            return true;
+        }
 
         function mapSave() {
             try { localStorage.setItem(MAP_KEY, JSON.stringify(mapState)); } catch (e) {}
@@ -1857,51 +1896,59 @@
             return `${x - 1},${y}|${x},${y}`;
         }
 
-        function mapApplyEvent(act, wf, wl, wr, pf, pl, pr, wn) {
+        function mapApplyEvent(act, wf, wl, wr, pf, pl, pr, wn, blk) {
             const labels = { F: 'Tiến thẳng', L: 'Rẽ trái & tiến', R: 'Rẽ phải & tiến', B: 'Quay đầu & tiến', S: 'Đọc vách' };
+            // Ghi vách giống robot: đọc cảm biến chỉ được THÊM tường, không xoá tường đã thấy;
+            // sure = true (xe vừa đi qua cửa) mới được ghi đè thành trống.
+            const setW = (k, v, sure) => {
+                if (!v && !sure && mapState.walls[k] === 1) return;
+                mapState.walls[k] = v ? 1 : 0;
+            };
             if (act === 'L') mapState.h = (mapState.h + 3) % 4;
             else if (act === 'R') mapState.h = (mapState.h + 1) % 4;
             else if (act === 'B') mapState.h = (mapState.h + 2) % 4;
-            if (act !== 'S') {
+            const moved = act !== 'S' && !blk; // blk: bị tường chặn, xe chỉ xoay, vẫn ở ô cũ
+            if (moved) {
                 mapState.x += DIR_DX[mapState.h];
                 mapState.y += DIR_DY[mapState.h];
                 mapState.trail.push([mapState.x, mapState.y]);
                 if (mapState.trail.length > 1000) mapState.trail.shift();
             }
+            mapNormalize(); // xe đi sang toạ độ âm -> dời map về lại >= 0
             const h = mapState.h;
             const x = mapState.x, y = mapState.y;
             mapState.cells[`${x},${y}`] = 1;
 
-            // 1. Cập nhật vách ô hiện tại (x, y):
-            // Nếu xe vừa di chuyển vào ô này (act !== 'S'), vách sau xe (cửa vừa đi qua từ ô trước) chắc chắn thông
-            if (act !== 'S') {
-                mapState.walls[edgeKey(x, y, (h + 2) % 4)] = 0;
+            if (blk) {
+                setW(edgeKey(x, y, h), 1, true);
+                mapState.last = 'Bị tường chặn';
+                mapSave();
+                mapDraw();
+                return;
             }
+
+            // 1. Cập nhật vách ô hiện tại (x, y):
+            // Xe vừa di chuyển vào ô này: vách sau xe (cửa vừa đi qua) chắc chắn thông
+            if (moved) setW(edgeKey(x, y, (h + 2) % 4), 0, true);
             // Vách hông của chính ô hiện tại:
-            if (x === 0 && y === 0 && act === 'S') {
-                // Ô xuất phát (0,0) mặc định luôn có 2 tường bên
-                mapState.walls[edgeKey(0, 0, (h + 3) % 4)] = 1;
-                mapState.walls[edgeKey(0, 0, (h + 1) % 4)] = 1;
+            if (x === mapState.sx && y === mapState.sy && act === 'S') {
+                // Ô xuất phát mặc định luôn có 2 tường bên
+                setW(edgeKey(x, y, (h + 3) % 4), 1);
+                setW(edgeKey(x, y, (h + 1) % 4), 1);
             } else if (pl !== undefined && pr !== undefined) {
                 // Vách hông ô hiện tại được robot gửi kèm (lấy mẫu chuẩn khi vào ô)
-                mapState.walls[edgeKey(x, y, (h + 3) % 4)] = pl ? 1 : 0;
-                mapState.walls[edgeKey(x, y, (h + 1) % 4)] = pr ? 1 : 0;
+                setW(edgeKey(x, y, (h + 3) % 4), pl);
+                setW(edgeKey(x, y, (h + 1) % 4), pr);
             }
             // Vách trước của chính ô hiện tại (tường sát ngay mũi xe)
-            mapState.walls[edgeKey(x, y, h)] = wn ? 1 : 0;
+            setW(edgeKey(x, y, h), wn);
 
-            // 2. CẬP NHẬT TƯƠNG LAI (NHÌN TRƯỚC 1 Ô ax, ay):
-            // Cảm biến 45° chĩa ra trước nên quét vách của ô phía trước (ax, ay)
+            // 2. NHÌN TRƯỚC 1 Ô (ax, ay): cảm biến 45° quét vách của ô phía trước
             if (!wn) {
                 const ax = x + DIR_DX[h], ay = y + DIR_DY[h];
-                // Cửa thông giữa (x, y) và (ax, ay)
-                mapState.walls[edgeKey(x, y, h)] = 0;
-                // Vách trước của ô phía trước (đo bởi cảm biến ToF trước tầm xa)
-                mapState.walls[edgeKey(ax, ay, h)] = wf ? 1 : 0;
-                // Vách trái ô phía trước: 1 = có tường, 0 = mở đường rẽ trái!
-                mapState.walls[edgeKey(ax, ay, (h + 3) % 4)] = wl ? 1 : 0;
-                // Vách phải ô phía trước: 1 = có tường, 0 = mở đường rẽ phải!
-                mapState.walls[edgeKey(ax, ay, (h + 1) % 4)] = wr ? 1 : 0;
+                setW(edgeKey(ax, ay, h), wf);
+                setW(edgeKey(ax, ay, (h + 3) % 4), wl);
+                setW(edgeKey(ax, ay, (h + 1) % 4), wr);
             }
 
             mapState.last = labels[act] || act;
@@ -1909,27 +1956,70 @@
             mapDraw();
         }
 
-        function ffGoalChanged() {
-            const gx = parseInt(document.getElementById('ffGoalX').value) || 0;
-            const gy = parseInt(document.getElementById('ffGoalY').value) || 0;
-            mapState.cfg.gx = Math.min(15, Math.max(0, gx));
-            mapState.cfg.gy = Math.min(15, Math.max(0, gy));
+        // Đích = vùng gs×gs, (gx,gy) là góc dưới trái; luôn nằm gọn trong lưới 16×16 của robot
+        function ffSetGoal(gx, gy, gs) {
+            const c = mapState.cfg;
+            c.gs = gs === 2 ? 2 : 1;
+            c.gx = Math.min(FF_N - c.gs, Math.max(0, gx | 0));
+            c.gy = Math.min(FF_N - c.gs, Math.max(0, gy | 0));
             mapSave();
             mapDraw();
+            ffPushGoal(true);
+        }
+
+        // Dashboard là nơi quyết định đích: đặt xong gửi ngay xuống robot (nếu đang kết nối).
+        // force=false: chỉ gửi lại tối đa 1 lần/giây khi robot báo đích khác (vd robot vừa khởi động lại).
+        let ffGoalSentAt = 0;
+        function ffPushGoal(force) {
+            if (!rxCharacteristic) return;
+            if (!force && Date.now() - ffGoalSentAt < 1000) return;
+            ffGoalSentAt = Date.now();
+            const c = mapState.cfg;
+            sendCmd(`SET_GOAL=${c.gx},${c.gy},${c.gs}`);
+        }
+
+        function ffGoalChanged() {
+            ffSetGoal(parseInt(document.getElementById('ffGoalX').value) || 0,
+                      parseInt(document.getElementById('ffGoalY').value) || 0,
+                      parseInt(document.getElementById('ffGoalSize').value) || 1);
+        }
+
+        // Floodfill giống robot: BFS nhiều nguồn từ các ô đích, tường chưa biết = trống.
+        // Trả về Map "x,y" -> số bước (chỉ ô tới được).
+        function mapFlood(b) {
+            const dist = new Map();
+            const q = [];
+            const c = mapState.cfg;
+            for (let dx = 0; dx < c.gs; dx++)
+                for (let dy = 0; dy < c.gs; dy++) {
+                    const x = c.gx + dx, y = c.gy + dy;
+                    if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY) continue;
+                    dist.set(`${x},${y}`, 0); q.push([x, y]);
+                }
+            for (let i = 0; i < q.length; i++) {
+                const [x, y] = q[i];
+                const d = dist.get(`${x},${y}`);
+                for (let dir = 0; dir < 4; dir++) {
+                    const nx = x + DIR_DX[dir], ny = y + DIR_DY[dir];
+                    if (nx < b.minX || nx > b.maxX || ny < b.minY || ny > b.maxY) continue;
+                    if (mapState.walls[edgeKey(x, y, dir)] === 1 || dist.has(`${nx},${ny}`)) continue;
+                    dist.set(`${nx},${ny}`, d + 1); q.push([nx, ny]);
+                }
+            }
+            return dist;
         }
 
         function ffStart(mode) {
-            if (mapState.cfg.corner !== 'BL') {
-                alert('Flood-fill dùng toạ độ tuyệt đối của robot: hãy chọn "Góc dưới trái" cho vị trí ô xuất phát.');
-                return;
-            }
             if (mapState.x < 0 || mapState.y < 0 || mapState.x > 15 || mapState.y > 15) {
                 alert('Vị trí xe nằm ngoài lưới 16×16 của robot. Hãy xóa map và đặt lại xe.');
                 return;
             }
             ffGoalChanged();
+            // Kích thước mê cung thật = lưới map -> robot coi ngoài lưới là tường, không chạy ra ngoài
+            const b = mapBounds();
+            sendCmd(`SET_SIZE=${Math.min(FF_N, b.maxX + 1)},${Math.min(FF_N, b.maxY + 1)}`);
             sendCmd(`SET_POS=${mapState.x},${mapState.y},${mapState.h}`);
-            sendCmd(`SET_GOAL=${mapState.cfg.gx},${mapState.cfg.gy}`);
+            sendCmd(`SET_GOAL=${mapState.cfg.gx},${mapState.cfg.gy},${mapState.cfg.gs}`);
             if (mode === 1) sendCmd('SET_MAX_CELLS=300');
             sendCmd(mode === 0 ? 'FF_ON' : 'FF_EXPLORE');
         }
@@ -1940,6 +2030,7 @@
             const h = mapState.h;
             mapState = mapNewState(h);
             mapState.cfg = cfg;
+            mapNormalize();
             mapSave();
             mapDraw();
         }
@@ -1947,9 +2038,9 @@
         function mapSetHeading(v) {
             mapState.h = parseInt(v) % 4;
             // Xe chưa đi ô nào: đặt lại tường ô xuất phát theo hướng mới
-            if (mapState.x === 0 && mapState.y === 0 && mapState.trail.length <= 1) {
-                for (let d = 0; d < 4; d++) delete mapState.walls[edgeKey(0, 0, d)];
-                Object.assign(mapState.walls, mapStartWalls(mapState.h));
+            if (mapState.x === mapState.sx && mapState.y === mapState.sy && mapState.trail.length <= 1) {
+                for (let d = 0; d < 4; d++) delete mapState.walls[edgeKey(mapState.sx, mapState.sy, d)];
+                Object.assign(mapState.walls, mapStartWalls(mapState.h, mapState.sx, mapState.sy));
             }
             mapSave();
             mapDraw();
@@ -1959,8 +2050,9 @@
             const c = mapState.cfg;
             if (key === 'cols' || key === 'rows') c[key] = Math.min(32, Math.max(2, parseInt(val) || 2));
             else if (key === 'zoom') c.zoom = Math.min(120, Math.max(16, parseInt(val) || 64));
-            else if (key === 'trail') c.trail = !!val;
+            else if (key === 'trail' || key === 'flood') c[key] = !!val;
             else c[key] = val;
+            mapNormalize();
             mapSave();
             mapDraw();
         }
@@ -1987,10 +2079,11 @@
             const c = mapState.cfg;
             const right = c.corner === 'BR' || c.corner === 'TR';
             const top = c.corner === 'TL' || c.corner === 'TR';
-            let minX = right ? -(c.cols - 1) : 0;
-            let maxX = right ? 0 : c.cols - 1;
-            let minY = top ? -(c.rows - 1) : 0;
-            let maxY = top ? 0 : c.rows - 1;
+            const sx = mapState.sx || 0, sy = mapState.sy || 0;
+            let minX = right ? sx - (c.cols - 1) : sx;
+            let maxX = right ? sx : sx + c.cols - 1;
+            let minY = top ? sy - (c.rows - 1) : sy;
+            let maxY = top ? sy : sy + c.rows - 1;
             let overflow = false;
             const grow = (x, y) => {
                 if (x < minX) { minX = x; overflow = true; }
@@ -2048,6 +2141,55 @@
                         : (((x + y) & 1) ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.05)');
                     ctx.fillRect(px(x) + gap, py(y) + gap, S - gap * 2, S - gap * 2);
                 }
+            }
+
+            // Vùng đích flood-fill: tô nền + viền bao quanh cả vùng gs×gs
+            const g0x = Math.max(c.gx, b.minX), g1x = Math.min(c.gx + c.gs - 1, b.maxX);
+            const g0y = Math.max(c.gy, b.minY), g1y = Math.min(c.gy + c.gs - 1, b.maxY);
+            if (g0x <= g1x && g0y <= g1y) {
+                const rx = px(g0x) + gap, ry = py(g1y) + gap;
+                const rw = (g1x - g0x + 1) * S - gap * 2, rh = (g1y - g0y + 1) * S - gap * 2;
+                ctx.fillStyle = 'rgba(250,204,21,0.16)';
+                ctx.fillRect(rx, ry, rw, rh);
+                ctx.strokeStyle = '#facc15';
+                ctx.lineWidth = Math.max(2, Math.round(S / 24));
+                ctx.setLineDash([Math.round(S / 10), Math.round(S / 14)]);
+                ctx.strokeRect(rx + gap * 2, ry + gap * 2, rw - gap * 4, rh - gap * 4);
+                ctx.setLineDash([]);
+            }
+
+            // Số bước tới đích (floodfill) trong từng ô
+            mapState.dist = undefined;
+            if (c.flood) {
+                const dist = mapFlood(b);
+                let maxD = 1;
+                dist.forEach(v => { if (v > maxD) maxD = v; });
+                ctx.font = `700 ${Math.round(Math.max(8, Math.min(16, S / dpr / 3.2)) * dpr)}px monospace`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                for (let x = b.minX; x <= b.maxX; x++) {
+                    for (let y = b.minY; y <= b.maxY; y++) {
+                        if (x === mapState.x && y === mapState.y) continue; // nhường chỗ cho xe
+                        const d = dist.get(`${x},${y}`);
+                        if (d === undefined) {
+                            ctx.fillStyle = 'rgba(248,113,113,0.6)';
+                            ctx.fillText('∞', px(x) + S / 2, py(y) + S / 2);
+                            continue;
+                        }
+                        if (d === 0) { ctx.fillStyle = '#facc15'; ctx.fillText('★', px(x) + S / 2, py(y) + S / 2); continue; }
+                        // Gần đích: vàng sáng, xa đích: xám mờ -> nhìn ra "dốc" floodfill
+                        const t = d / maxD;
+                        ctx.fillStyle = `hsla(${48 - 28 * t}, ${90 - 70 * t}%, ${70 - 10 * t}%, ${0.95 - 0.4 * t})`;
+                        ctx.fillText(d, px(x) + S / 2, py(y) + S / 2);
+                    }
+                }
+                const here = dist.get(`${mapState.x},${mapState.y}`);
+                mapState.dist = here === undefined ? '∞' : here;
+            } else if (g0x <= g1x && g0y <= g1y) {
+                ctx.fillStyle = '#facc15';
+                ctx.font = `800 ${Math.round(S * 0.3)}px sans-serif`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                for (let x = g0x; x <= g1x; x++)
+                    for (let y = g0y; y <= g1y; y++) ctx.fillText('★', px(x) + S / 2, py(y) + S / 2);
             }
 
             // Nhãn toạ độ
@@ -2118,25 +2260,14 @@
                 }
             }
 
-            // Ô đích flood-fill
-            if (c.gx !== undefined && c.gx >= b.minX && c.gx <= b.maxX && c.gy >= b.minY && c.gy <= b.maxY) {
-                ctx.strokeStyle = '#facc15';
-                ctx.lineWidth = Math.max(2, Math.round(S / 24));
-                ctx.strokeRect(px(c.gx) + gap * 3, py(c.gy) + gap * 3, S - gap * 6, S - gap * 6);
-                ctx.fillStyle = '#facc15';
-                ctx.font = `800 ${Math.round(S * 0.3)}px sans-serif`;
-                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText('★', px(c.gx) + S / 2, py(c.gy) + S / 2);
-            }
-
             // Ô xuất phát
             const badge = Math.max(12, Math.round(S * 0.24));
             ctx.fillStyle = 'rgba(245,158,11,0.95)';
-            ctx.fillRect(px(0) + gap + 4, py(0) + gap + 4, badge, badge);
+            ctx.fillRect(px(mapState.sx) + gap + 4, py(mapState.sy) + gap + 4, badge, badge);
             ctx.fillStyle = '#1a1200';
             ctx.font = `800 ${Math.round(badge * 0.7)}px sans-serif`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText('S', px(0) + gap + 4 + badge / 2, py(0) + gap + 4 + badge / 2 + 1);
+            ctx.fillText('S', px(mapState.sx) + gap + 4 + badge / 2, py(mapState.sy) + gap + 4 + badge / 2 + 1);
 
             // Xe
             ctx.save();
@@ -2157,6 +2288,7 @@
             set('mapSizeText', `${c.cols} × ${c.rows}` + (b.overflow ? ' (mở rộng)' : ''));
             set('mapVisited', Object.keys(mapState.cells).length);
             set('mapLastAct', mapState.last);
+            set('mapDistText', mapState.dist !== undefined ? mapState.dist : '--');
             set('mapColsVal', c.cols);
             set('mapRowsVal', c.rows);
             set('mapZoomVal', c.zoom + ' px');
@@ -2166,9 +2298,26 @@
             const gxEl = document.getElementById('ffGoalX'), gyEl = document.getElementById('ffGoalY');
             if (gxEl && document.activeElement !== gxEl) gxEl.value = c.gx;
             if (gyEl && document.activeElement !== gyEl) gyEl.value = c.gy;
+            val('ffGoalSize', c.gs);
+            const fchk = document.getElementById('mapFloodChk');
+            if (fchk) fchk.checked = !!c.flood;
             const chk = document.getElementById('mapTrailChk');
             if (chk) chk.checked = !!c.trail;
         }
+
+        // Bấm vào ô trên map -> đặt ô đó làm đích (góc dưới trái của vùng đích)
+        document.getElementById('mapCanvas').addEventListener('click', e => {
+            const cv = e.currentTarget, c = mapState.cfg, b = mapBounds();
+            const r = cv.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            const scale = cv.width / r.width;
+            const S = Math.max(12, Math.round(c.zoom * dpr));
+            const pad = Math.round(28 * dpr);
+            const x = b.minX + Math.floor(((e.clientX - r.left) * scale - pad) / S);
+            const y = b.maxY - Math.floor(((e.clientY - r.top) * scale - pad) / S);
+            if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY) return;
+            ffSetGoal(x, y, c.gs);
+        });
 
         function mapExport() {
             const cv = document.getElementById('mapCanvas');
@@ -2547,6 +2696,14 @@
                     if (rr) rr.textContent = (data.auto3 === true || data.auto3 === "true") ? 'ĐANG CHẠY' : 'DỪNG';
                 }
 
+                // Robot báo đích khác với đích trên map -> gửi lại đích của map xuống robot
+                // (KHÔNG lấy đích robot đè lên map, tránh bị reset về (7,7))
+                if (data.fgx !== undefined && data.fgy !== undefined) {
+                    const c = mapState.cfg;
+                    const gs = data.fgs !== undefined ? +data.fgs : c.gs;
+                    if (c.gx !== +data.fgx || c.gy !== +data.fgy || c.gs !== gs) ffPushGoal(false);
+                }
+
                 if (data.ffon !== undefined) {
                     const chip = document.getElementById('ffStatusChip');
                     if (chip) chip.textContent = (data.ffon === true || data.ffon === "true") ? 'ĐANG CHẠY' : 'DỪNG';
@@ -2603,7 +2760,7 @@
                 }
             }
             else if (data.type === "cell") {
-                mapApplyEvent(data.act, data.wf, data.wl, data.wr, data.pf, data.pl, data.pr, data.wn);
+                mapApplyEvent(data.act, data.wf, data.wl, data.wr, data.pf, data.pl, data.pr, data.wn, data.blk);
             }
             else if (data.type === "turn_res") {
                 document.getElementById('resTarget').textContent = `${data.target.toFixed(1)}°`;

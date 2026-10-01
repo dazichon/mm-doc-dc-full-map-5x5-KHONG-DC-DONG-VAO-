@@ -35,7 +35,7 @@ public:
     void reset() {
         step = 10000;
         north_wall = south_wall = east_wall = west_wall = false;
-        checked = run_visited = false;
+        checked = run_visited = known = false;
     }
 };
 
@@ -64,10 +64,11 @@ public:
     }
 
     // ---------------- Floodfill ----------------
-    // BFS từ đích, ghi khoảng cách vào cell.step.
+    // BFS nhiều nguồn từ VÙNG ĐÍCH (gx..gx+size-1, gy..gy+size-1), ghi khoảng cách vào cell.step.
+    // size = 1: đích 1 ô; size = 2: đích 2x2 (chuẩn micromouse, 4 ô trung tâm).
     // use_penalty: ô chưa đi qua bị cộng PENALTY (ưu tiên ô đã biết).
     // require_visited: chỉ cho đi qua ô đã run_visited.
-    void floodfill_update(int goal_x, int goal_y, bool use_penalty, bool require_visited) {
+    void floodfill_update(int goal_x, int goal_y, bool use_penalty, bool require_visited, int size = 1) {
         const int PENALTY = 30;
         const int QUEUE_SIZE = MAZE_SIZE * MAZE_SIZE;
         Point queue[QUEUE_SIZE];
@@ -76,9 +77,13 @@ public:
         for (int y = 0; y < MAZE_SIZE; ++y)
             for (int x = 0; x < MAZE_SIZE; ++x) maze[x][y].step = 65535;
 
-        Point dest = {(int8_t)goal_x, (int8_t)goal_y};
-        maze[dest.x][dest.y].step = 0;
-        queue[tail] = dest; tail = (tail + 1) % QUEUE_SIZE;
+        for (int dx = 0; dx < size; ++dx)
+            for (int dy = 0; dy < size; ++dy) {
+                int gx = goal_x + dx, gy = goal_y + dy;
+                if (gx < 0 || gx >= MAZE_SIZE || gy < 0 || gy >= MAZE_SIZE) continue;
+                maze[gx][gy].step = 0;
+                queue[tail] = {(int8_t)gx, (int8_t)gy}; tail = (tail + 1) % QUEUE_SIZE;
+            }
 
         while (head != tail) {
             Point cur = queue[head]; head = (head + 1) % QUEUE_SIZE;
@@ -207,15 +212,18 @@ public:
         return {};
     }
 
-    // ---------------- BFS tìm ô chưa đi qua gần nhất ----------------
-    // Trả về {-1,-1} nếu không còn ô nào.
+    // ---------------- BFS tìm ô chưa khám phá gần nhất ----------------
+    // Trả về {-1,-1} nếu không còn ô nào tới được mà chưa biết vách (đã đi hết map).
     Point find_nearest_unvisited(Point start) {
         std::queue<Point> q;
         bool visited[MAZE_SIZE][MAZE_SIZE] = {};
         q.push(start); visited[start.x][start.y] = true;
         while (!q.empty()) {
             Point cur = q.front(); q.pop();
-            if (!maze[cur.x][cur.y].run_visited) return cur;
+            // Ô cần khám phá = chưa đi qua VÀ chưa biết đủ 4 vách.
+            // Ô đã nhìn thấy đủ vách từ ô bên cạnh (known) thì không cần bước vào nữa,
+            // chỉ loang tiếp qua nó. Hết ô cần khám phá -> trả {-1,-1} -> xe dừng.
+            if (!maze[cur.x][cur.y].run_visited && !maze[cur.x][cur.y].known) return cur;
             Point nb[4] = {{cur.x, (int8_t)(cur.y + 1)}, {(int8_t)(cur.x + 1), cur.y},
                            {cur.x, (int8_t)(cur.y - 1)}, {(int8_t)(cur.x - 1), cur.y}};
             bool walls[4] = {maze[cur.x][cur.y].north_wall, maze[cur.x][cur.y].east_wall,

@@ -39,7 +39,7 @@ public:
   // 4 Hàm Chuyển Động Nguyên Tử (Atomic Motion - Bước 3)
   // turn: 'F' thẳng, 'L' trái, 'R' phải, 'B' quay đầu (chỉ để báo cáo bản đồ)
   WallStatus moveOneCell(char turn = 'F');
-  void reportCell(char act, const WallStatus &w, const WallStatus *pre = nullptr);
+  void reportCell(char act, const WallStatus &w, const WallStatus *pre = nullptr, bool blocked = false);
   WallStatus turnLeftAndStep();
   WallStatus turnRightAndStep();
   WallStatus turnAroundAndStep();
@@ -53,6 +53,7 @@ public:
   // Cảm biến hông đặt xiên nên nhìn về PHÍA TRƯỚC ~1 ô: vách hông ô đích được lấy mẫu khi xe
   // đã chạy được sideSampleFrac (0..1) quãng đường của ô, không đọc lúc đã đứng ở tâm ô.
   float sideSampleFrac;
+  bool lastMoveBlocked; // bước gần nhất bị tường chặn sớm, xe vẫn ở ô cũ
   bool startCellFresh; // xe còn ở ô xuất phát (hướng Bắc, có tường trái/phải/sau), chưa đi ô nào
   WallStatus preWalls; // vách đọc trước khi bước (cảm biến nhìn trước 1 ô) = vách ô sắp vào
   WallStatus curWalls; // vách của ô đang đứng (theo hướng xe hiện tại)
@@ -69,6 +70,11 @@ public:
   uint8_t ffMode; // 0: đi tới đích (goal), 1: khám phá toàn bộ rồi quay về ô xuất phát
   int8_t ffX, ffY, ffH;
   Point ffStart, ffGoal;
+  uint8_t ffCols, ffRows; // kích thước mê cung thật (<= MAZE_SIZE), ngoài vùng này coi như tường
+  uint8_t ffGoalSize; // 1: đích 1 ô, 2: vùng đích 2x2 bắt đầu từ ffGoal (góc dưới trái)
+  bool ffInGoal(int x, int y) const {
+    return x >= ffGoal.x && x < ffGoal.x + ffGoalSize && y >= ffGoal.y && y < ffGoal.y + ffGoalSize;
+  }
   void startFloodFill(uint8_t mode);
   void stopFloodFill(const char *reason = "ĐÃ DỪNG");
   void stepFloodFill();

@@ -72,6 +72,9 @@ RobotNav::RobotNav()
   ffActive = false;
   ffMode = 0;
   ffGoal = {7, 7};
+  ffGoalSize = 2; // 4 ô trung tâm mê cung 16x16
+  ffCols = ffRows = MAZE_SIZE;
+  lastMoveBlocked = false;
   resetFloodFill(0, 0, 0);
 }
 
@@ -521,7 +524,7 @@ WallStatus RobotNav::senseCurrentWalls() {
   return walls;
 }
 
-void RobotNav::reportCell(char act, const WallStatus &w, const WallStatus *pre) {
+void RobotNav::reportCell(char act, const WallStatus &w, const WallStatus *pre, bool blocked) {
   // Gói JSON cho bản đồ trên Dashboard: act = F/L/R/B (đã di chuyển) hoặc S (chỉ đọc vách)
   // Cảm biến nhìn trước 1 ô: wf/wl/wr = vách của Ô PHÍA TRƯỚC xe;
   // pf/pl/pr (nếu có) = vách của chính ô vừa bước vào
@@ -535,6 +538,7 @@ void RobotNav::reportCell(char act, const WallStatus &w, const WallStatus *pre) 
          ",\"pl\":" + String(pre->hasLeft ? 1 : 0) +
          ",\"pr\":" + String(pre->hasRight ? 1 : 0);
   }
+  if (blocked) j += ",\"blk\":1"; // chỉ xoay, không tiến ô
   j += "}";
   bleManager.println(j);
 }
@@ -622,6 +626,14 @@ WallStatus RobotNav::moveOneCell(char turn) {
   curCellWalls.hasFrontNear = status.hasFrontNear;
   curWalls = curCellWalls;
 
+  // Bị tường chặn khi chưa đi được nửa ô -> xe vẫn ở ô cũ (thường do đọc nhầm cửa mở)
+  lastMoveBlocked = stepTraveledPulses < pulsesPerCell / 2;
+  if (lastMoveBlocked) {
+    status.hasFrontNear = true;
+    status.hasFront = false;
+    bleManager.println(">> [ATOMIC] BI TUONG CHAN! Xe van o o cu (" + String(stepTraveledPulses) + " xung)");
+  }
+
   String resMsg = ">> [ATOMIC] DA DEN TAM O MOI! O ke tiep: Truoc=" + String(status.hasFront ? "CO" : "TRONG") +
                   " | Trai=" + String(status.hasLeft ? "CO" : "TRONG") +
                   " | Phai=" + String(status.hasRight ? "CO" : "TRONG") +
@@ -633,7 +645,7 @@ WallStatus RobotNav::moveOneCell(char turn) {
                   " | Xung: " + String(stepTraveledPulses);
   Serial.println(resMsg);
   bleManager.println(resMsg);
-  reportCell(turn, status, &curCellWalls);
+  reportCell(turn, status, lastMoveBlocked ? nullptr : &curCellWalls, lastMoveBlocked);
 
   return status;
 }
@@ -789,7 +801,10 @@ void RobotNav::stepAutoWallFollow() {
 // CHẾ ĐỘ 4: FLOOD-FILL (dùng maze_algorithm.h)
 // =========================================================================
 
-static void ffSetWall(ParentMaze &m, int x, int y, int dir, bool wall) {
+// sure = true: chắc chắn (xe vừa đi qua cửa này) -> ghi đè.
+// sure = false: đọc cảm biến -> chỉ được THÊM tường, không xoá tường đã thấy
+// (tránh đọc nhiễu 1 lần làm "phá tường" rồi xe lao vào tường).
+static void ffSetWall(ParentMaze &m, int x, int y, int dir, bool wall, bool sure = false) {
   static const int DX[4] = {0, 1, 0, -1};
   static const int DY[4] = {1, 0, -1, 0};
   int nx = x + DX[dir], ny = y + DY[dir];
@@ -797,6 +812,7 @@ static void ffSetWall(ParentMaze &m, int x, int y, int dir, bool wall) {
     return; // tường biên luôn có sẵn
   Cell &c = m.cell(x, y);
   bool *self[4] = {&c.north_wall, &c.east_wall, &c.south_wall, &c.west_wall};
+  if (!wall && !sure && *self[dir]) return;
   *self[dir] = wall;
   Cell &n = m.cell(nx, ny);
   bool *other[4] = {&n.north_wall, &n.east_wall, &n.south_wall, &n.west_wall};
@@ -826,6 +842,9 @@ void RobotNav::resetFloodFill(int x, int y, int h) {
   ffY = y;
   ffH = ((h % 4) + 4) % 4;
   ffStart = {(int8_t)x, (int8_t)y};
+  // Tường bao quanh mê cung thật ffCols x ffRows
+  for (int i = 0; i < ffRows; i++) ffSetWall(ffMaze, ffCols - 1, i, 1, true, true);
+  for (int i = 0; i < ffCols; i++) ffSetWall(ffMaze, i, ffRows - 1, 0, true, true);
 }
 
 void RobotNav::startFloodFill(uint8_t mode) {
@@ -853,7 +872,8 @@ void RobotNav::startFloodFill(uint8_t mode) {
   String msg = ">> [CHẾ ĐỘ 4] FLOOD-FILL " +
                String(mode == 0 ? "TỚI ĐÍCH" : "KHÁM PHÁ TOÀN BỘ") + " | Xe (" +
                String(ffX) + "," + String(ffY) + ") hướng " + String(ffH) +
-               " | Đích (" + String(ffGoal.x) + "," + String(ffGoal.y) + ")";
+               " | Đích (" + String(ffGoal.x) + "," + String(ffGoal.y) + ") " +
+               String(ffGoalSize) + "x" + String(ffGoalSize);
   Serial.println(msg);
   bleManager.println(msg);
 }
@@ -881,7 +901,7 @@ void RobotNav::stepFloodFill() {
   Point next = cur;
 
   if (ffMode == 1) {
-    // KHÁM PHÁ HẾT: ưu tiên ô kề CHƯA ĐI theo thứ tự thẳng -> trái -> phải
+    // KHÁM PHÁ HẾT: ưu tiên ô kề CHƯA KHÁM PHÁ theo thứ tự thẳng -> trái -> phải
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {1, 0, -1, 0};
     static const int PRIORITY[3] = {0, 3, 1}; // lệch so với hướng xe: thẳng, trái, phải
@@ -892,7 +912,7 @@ void RobotNav::stepFloodFill() {
       int d = (ffH + PRIORITY[k]) % 4;
       int nx = cur.x + DX[d], ny = cur.y + DY[d];
       if (wall[d] || nx < 0 || nx >= MAZE_SIZE || ny < 0 || ny >= MAZE_SIZE) continue;
-      if (ffMaze.cell(nx, ny).run_visited) continue;
+      if (ffMaze.cell(nx, ny).run_visited || ffMaze.cell(nx, ny).known) continue; // đã biết đủ vách
       next = {(int8_t)nx, (int8_t)ny};
       picked = true;
     }
@@ -909,13 +929,15 @@ void RobotNav::stepFloodFill() {
     }
   }
 
-  if (cur.x == target.x && cur.y == target.y) {
+  bool arrived = (ffMode == 0) ? ffInGoal(cur.x, cur.y)
+                                : (cur.x == target.x && cur.y == target.y);
+  if (arrived) {
     stopFloodFill("ĐÃ TỚI ĐÍCH");
     return;
   }
 
   if (ffMode == 0 || (next.x == cur.x && next.y == cur.y)) {
-    ffMaze.floodfill_update(target.x, target.y, false, false);
+    ffMaze.floodfill_update(target.x, target.y, false, false, ffMode == 0 ? ffGoalSize : 1);
     next = ffMaze.get_next_move(cur.x, cur.y);
     if ((next.x == cur.x && next.y == cur.y) || ffMaze.cell(cur.x, cur.y).step >= 65535) {
       stopFloodFill("KHÔNG CÒN ĐƯỜNG ĐI");
@@ -946,10 +968,19 @@ void RobotNav::stepFloodFill() {
   }
 
   ffH = dir;
+  if (lastMoveBlocked) {
+    // Không đi được: xe vẫn ở ô cũ, hướng mới -> ghi chắc chắn tường trước rồi tính lại đường
+    ffSetWall(ffMaze, ffX, ffY, ffH, true, true);
+    String m = ">> [CHẾ ĐỘ 4] Bị tường chặn tại (" + String(ffX) + "," + String(ffY) + "), tính lại đường";
+    Serial.println(m);
+    bleManager.println(m);
+    delay(80);
+    return;
+  }
   ffX = next.x;
   ffY = next.y;
   // Cửa xe vừa bước qua luôn thông
-  ffSetWall(ffMaze, ffX, ffY, (ffH + 2) % 4, false);
+  ffSetWall(ffMaze, ffX, ffY, (ffH + 2) % 4, false, true);
   if (!ffMaze.cell(ffX, ffY).known) {
     ffSetWall(ffMaze, ffX, ffY, (ffH + 3) % 4, curWalls.hasLeft);
     ffSetWall(ffMaze, ffX, ffY, (ffH + 1) % 4, curWalls.hasRight);

@@ -1149,25 +1149,25 @@
                     <div class="param-group">
                         <div class="param-header">
                             <div class="param-title">🔄 Tốc độ quay góc rẽ</div>
-                            <div class="param-value-badge" id="valBadgeSPD">70</div>
+                            <div class="param-value-badge" id="valBadgeSPD">65</div>
                         </div>
-                        <input type="range" class="slider-input" id="sliderSPD" min="40" max="255" step="5" value="70" style="width:100%;">
+                        <input type="range" class="slider-input" id="sliderSPD" min="40" max="255" step="5" value="65" style="width:100%;">
                     </div>
 
                     <div class="param-group">
                         <div class="param-header">
                             <div class="param-title">📐 Bù rẽ trái</div>
-                            <div class="param-value-badge" id="valBadgeLC">22.0°</div>
+                            <div class="param-value-badge" id="valBadgeLC">5.0°</div>
                         </div>
-                        <input type="range" class="slider-input" id="sliderLC" min="0" max="50" step="0.5" value="22" style="width:100%;">
+                        <input type="range" class="slider-input" id="sliderLC" min="0" max="50" step="0.5" value="5" style="width:100%;">
                     </div>
 
                     <div class="param-group" style="margin-bottom: 0;">
                         <div class="param-header">
                             <div class="param-title">📐 Bù rẽ phải</div>
-                            <div class="param-value-badge" id="valBadgeRC">22.0°</div>
+                            <div class="param-value-badge" id="valBadgeRC">6.0°</div>
                         </div>
-                        <input type="range" class="slider-input" id="sliderRC" min="0" max="50" step="0.5" value="22" style="width:100%;">
+                        <input type="range" class="slider-input" id="sliderRC" min="0" max="50" step="0.5" value="6" style="width:100%;">
                         <div class="tune-hint">Bù rẽ = số độ trừ bớt để xe không bị lố góc do quán tính.</div>
                     </div>
                 </div>
@@ -1370,13 +1370,18 @@
                 .map-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 11px; color: var(--text-muted); }
                 .map-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -3px; margin-right: 5px; }
                 .map-select { background: rgba(0,0,0,0.4); color: #fff; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; outline: none; }
-                .m5-sensor { background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 12px; padding: 12px 8px; text-align: center; transition: border-color .2s, background .2s; }
+                .map-row { display: flex; gap: 10px; align-items: flex-start; }
+                .map-row .map-stage { flex: 1; min-width: 0; }
+                .mini-panel { width: 96px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
+                .mini-yaw { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.4); border-radius: 10px; padding: 6px 4px; text-align: center; }
+                .mini-yaw-val { font-size: 18px; font-weight: 800; font-family: monospace; color: #f59e0b; line-height: 1.2; }
+                .m5-sensor { background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 10px; padding: 6px 4px; text-align: center; transition: border-color .2s, background .2s; }
                 .m5-sensor.wall { border-color: rgba(34,211,238,0.6); background: rgba(34,211,238,0.08); }
                 .m5-sensor.stop { border-color: rgba(239,68,68,0.7); background: rgba(239,68,68,0.1); }
-                .m5-lbl { font-size: 11px; font-weight: 800; color: var(--text-muted); letter-spacing: .5px; }
-                .m5-val { font-size: 26px; font-weight: 800; font-family: monospace; color: var(--primary-cyan); line-height: 1.2; }
+                .m5-lbl { font-size: 10px; font-weight: 800; color: var(--text-muted); letter-spacing: .5px; }
+                .m5-val { font-size: 18px; font-weight: 800; font-family: monospace; color: var(--primary-cyan); line-height: 1.2; }
                 .m5-unit { font-size: 10px; color: var(--text-muted); }
-                .m5-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin: 8px 0 6px; }
+                .m5-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin: 4px 0; }
                 .m5-bar div { height: 100%; width: 0; background: linear-gradient(90deg, #0077ff, var(--primary-cyan)); transition: width .15s ease; }
                 .m5-state { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-block; background: rgba(255,255,255,0.06); color: var(--text-muted); }
                 .dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -1392,7 +1397,16 @@
                             <span class="map-chip" id="mapSizeText">8 × 8</span>
                         </div>
                     </div>
-                    <div class="map-stage"><canvas id="mapCanvas"></canvas></div>
+                    <div class="map-row">
+                        <div class="map-stage"><canvas id="mapCanvas"></canvas></div>
+                        <div class="mini-panel">
+                            <div class="mini-yaw"><div class="m5-lbl">🧭 GÓC</div><div class="mini-yaw-val" id="m5Yaw">0.0°</div></div>
+                            <div class="m5-sensor" id="m5BoxF"><div class="m5-lbl">⬆️ TRƯỚC</div><div class="m5-val" id="m5DistF">--</div><div class="m5-bar"><div id="m5BarF"></div></div><div class="m5-state" id="m5StateF">--</div></div>
+                            <div class="m5-sensor" id="m5BoxL"><div class="m5-lbl">⬅️ TRÁI</div><div class="m5-val" id="m5DistL">--</div><div class="m5-bar"><div id="m5BarL"></div></div><div class="m5-state" id="m5StateL">--</div></div>
+                            <div class="m5-sensor" id="m5BoxR"><div class="m5-lbl">➡️ PHẢI</div><div class="m5-val" id="m5DistR">--</div><div class="m5-bar"><div id="m5BarR"></div></div><div class="m5-state" id="m5StateR">--</div></div>
+                            <div class="m5-unit" style="text-align:center;">đơn vị: mm</div>
+                        </div>
+                    </div>
                     <div class="map-legend">
                         <span><i style="background:#22d3ee"></i>Tường</span>
                         <span><i style="background:rgba(16,185,129,0.4)"></i>Ô đã đi</span>
@@ -1425,55 +1439,16 @@
 
                     <div class="card" style="margin-bottom: 0;">
                         <div class="card-header" style="margin-bottom: 14px;">
-                            <div class="card-title">📡 Cảm Biến Khoảng Cách</div>
-                            <span class="map-chip" id="m5SensorChip">Real-time</span>
-                        </div>
-                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
-                            <div class="m5-sensor" id="m5BoxL">
-                                <div class="m5-lbl">⬅️ TRÁI</div>
-                                <div class="m5-val" id="m5DistL">--</div>
-                                <div class="m5-unit">mm</div>
-                                <div class="m5-bar"><div id="m5BarL"></div></div>
-                                <div class="m5-state" id="m5StateL">--</div>
-                            </div>
-                            <div class="m5-sensor" id="m5BoxF">
-                                <div class="m5-lbl">⬆️ TRƯỚC</div>
-                                <div class="m5-val" id="m5DistF">--</div>
-                                <div class="m5-unit">mm</div>
-                                <div class="m5-bar"><div id="m5BarF"></div></div>
-                                <div class="m5-state" id="m5StateF">--</div>
-                            </div>
-                            <div class="m5-sensor" id="m5BoxR">
-                                <div class="m5-lbl">➡️ PHẢI</div>
-                                <div class="m5-val" id="m5DistR">--</div>
-                                <div class="m5-unit">mm</div>
-                                <div class="m5-bar"><div id="m5BarR"></div></div>
-                                <div class="m5-state" id="m5StateR">--</div>
-                            </div>
-                        </div>
-                        <div style="font-size:11px;color:var(--text-muted);margin-top:10px;">
-                            Ngưỡng có tường: trái/phải &lt; <b id="m5Wth">230</b> mm · trước &le; <b id="m5Fstop">65</b> mm (+10). Cập nhật liên tục qua telemetry.
-                        </div>
-                    </div>
-
-                    <div class="card" style="margin-bottom: 0;">
-                        <div class="card-header" style="margin-bottom: 14px;">
-                            <div class="card-title">👉 Luật Rẽ Phải</div>
-                            <span class="map-chip" id="rrStatusChip">DỪNG</span>
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                            <button class="btn-atomic btn-atomic-turn-right" style="padding:12px;font-size:13px;" onclick="sendCmd('RULE_R'); sendCmd('AUTO_ON')">▶ Chạy luật rẽ phải</button>
-                            <button class="btn-atomic btn-atomic-stop" onclick="sendCmd('AUTO_OFF')">🛑 Dừng</button>
-                        </div>
-                        <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
-                            Thứ tự ưu tiên mỗi ô: <b>có đường bên phải → rẽ phải</b>; không thì <b>đi thẳng</b>; không thì <b>rẽ trái</b>; hết đường (ngõ cụt) → <b>quay đầu 180°</b>. Map cập nhật theo từng ô.
-                        </div>
-                    </div>
-
-                    <div class="card" style="margin-bottom: 0;">
-                        <div class="card-header" style="margin-bottom: 14px;">
                             <div class="card-title">🧠 Tự Động Flood-fill</div>
                             <span class="map-chip" id="ffStatusChip">DỪNG</span>
+                        </div>
+                        <!-- Tốc độ chạy thẳng: kéo là gửi SET_FSPD, xe lưu vào flash (giữ sau khi tắt nguồn) -->
+                        <div style="margin-bottom:12px;">
+                            <div class="param-header">
+                                <div class="param-title">🚀 Tốc độ chạy</div>
+                                <div class="param-value-badge" id="ff5SpeedBadge">75</div>
+                            </div>
+                            <input type="range" class="slider-input" id="ff5Speed" min="40" max="255" step="5" value="75" style="width:100%;">
                         </div>
                         <!-- Đi tới đích: đặt đích + xem số bước + chạy, gom chung 1 khối -->
                         <div style="border:1px solid rgba(250,204,21,0.35);background:rgba(250,204,21,0.05);border-radius:12px;padding:12px;">
@@ -1845,13 +1820,13 @@
             const w0 = {};
             w0[edgeKey(sx, sy, (h + 3) % 4)] = 1; // Vách trái ô xuất phát
             w0[edgeKey(sx, sy, (h + 1) % 4)] = 1; // Vách phải ô xuất phát
-            // Mặc định chỉ có 2 tường bên ở (0,0), không có tường sau
+            w0[edgeKey(sx, sy, (h + 2) % 4)] = 1; // Vách SAU ô xuất phát (theo hướng ban đầu của xe)
             return w0;
         }
 
         function mapNewState(h = 0) {
             const w0 = mapStartWalls(h);
-            return { x: 0, y: 0, sx: 0, sy: 0, h: h, cells: { '0,0': 1 }, walls: w0, trail: [[0, 0]], last: '--', cfg: Object.assign({}, MAP_DEFAULT_CFG) };
+            return { x: 0, y: 0, sx: 0, sy: 0, h: h, sh: h, cells: { '0,0': 1 }, walls: w0, trail: [[0, 0]], last: '--', cfg: Object.assign({}, MAP_DEFAULT_CFG) };
         }
         let mapState = mapNewState();
         try {
@@ -1859,6 +1834,7 @@
             if (saved && saved.cells) {
                 mapState = Object.assign(mapNewState(), saved);
                 mapState.cfg = Object.assign({}, MAP_DEFAULT_CFG, saved.cfg || {});
+                if (saved.sh === undefined) mapState.sh = saved.h; // map lưu từ bản cũ chưa có hướng ban đầu
             }
         } catch (e) {}
         mapNormalize();
@@ -1932,16 +1908,19 @@
             if (moved) setW(edgeKey(x, y, (h + 2) % 4), 0, true);
             // Vách hông của chính ô hiện tại:
             if (x === mapState.sx && y === mapState.sy && act === 'S') {
-                // Ô xuất phát mặc định luôn có 2 tường bên
-                setW(edgeKey(x, y, (h + 3) % 4), 1);
-                setW(edgeKey(x, y, (h + 1) % 4), 1);
+                // Ô xuất phát mặc định có tường trái, phải, sau - tính theo HƯỚNG BAN ĐẦU của xe
+                const sh = mapState.sh !== undefined ? mapState.sh : h;
+                setW(edgeKey(x, y, (sh + 3) % 4), 1);
+                setW(edgeKey(x, y, (sh + 1) % 4), 1);
+                setW(edgeKey(x, y, (sh + 2) % 4), 1);
             } else if (pl !== undefined && pr !== undefined) {
                 // Vách hông ô hiện tại được robot gửi kèm (lấy mẫu chuẩn khi vào ô)
-                setW(edgeKey(x, y, (h + 3) % 4), pl);
-                setW(edgeKey(x, y, (h + 1) % 4), pr);
+                // Xe đã tới ô này -> CẬP NHẬT LẠI (ghi đè) vách hông đã vẽ lúc nhìn trước 1 ô
+                setW(edgeKey(x, y, (h + 3) % 4), pl, moved);
+                setW(edgeKey(x, y, (h + 1) % 4), pr, moved);
             }
-            // Vách trước của chính ô hiện tại (tường sát ngay mũi xe)
-            setW(edgeKey(x, y, h), wn);
+            // Vách trước của chính ô hiện tại (đo lúc xe đã dừng hẳn trong ô) -> ghi đè
+            setW(edgeKey(x, y, h), wn, true);
 
             // 2. NHÌN TRƯỚC 1 Ô (ax, ay): cảm biến 45° quét vách của ô phía trước
             if (!wn) {
@@ -1970,8 +1949,9 @@
         // Dashboard là nơi quyết định đích: đặt xong gửi ngay xuống robot (nếu đang kết nối).
         // force=false: chỉ gửi lại tối đa 1 lần/giây khi robot báo đích khác (vd robot vừa khởi động lại).
         let ffGoalSentAt = 0;
+        let ffStarting = false; // ffStart tự gửi SET_GOAL tuần tự -> không gửi chen ngang
         function ffPushGoal(force) {
-            if (!rxCharacteristic) return;
+            if (!rxCharacteristic || ffStarting) return;
             if (!force && Date.now() - ffGoalSentAt < 1000) return;
             ffGoalSentAt = Date.now();
             const c = mapState.cfg;
@@ -2009,19 +1989,23 @@
             return dist;
         }
 
-        function ffStart(mode) {
+        async function ffStart(mode) {
             if (mapState.x < 0 || mapState.y < 0 || mapState.x > 15 || mapState.y > 15) {
                 alert('Vị trí xe nằm ngoài lưới 16×16 của robot. Hãy xóa map và đặt lại xe.');
                 return;
             }
+            ffStarting = true;
             ffGoalChanged();
+            ffStarting = false;
             // Kích thước mê cung thật = lưới map -> robot coi ngoài lưới là tường, không chạy ra ngoài
             const b = mapBounds();
-            sendCmd(`SET_SIZE=${Math.min(FF_N, b.maxX + 1)},${Math.min(FF_N, b.maxY + 1)}`);
-            sendCmd(`SET_POS=${mapState.x},${mapState.y},${mapState.h}`);
-            sendCmd(`SET_GOAL=${mapState.cfg.gx},${mapState.cfg.gy},${mapState.cfg.gs}`);
-            if (mode === 1) sendCmd('SET_MAX_CELLS=300');
-            sendCmd(mode === 0 ? 'FF_ON' : 'FF_EXPLORE');
+            // Gửi TUẦN TỰ (await): Web Bluetooth không cho 2 lệnh ghi cùng lúc ->
+            // gửi dồn sẽ báo "GATT operation already in progress" và lệnh FF_ON bị rơi mất.
+            await sendCmd(`SET_SIZE=${Math.min(FF_N, b.maxX + 1)},${Math.min(FF_N, b.maxY + 1)}`);
+            await sendCmd(`SET_POS=${mapState.x},${mapState.y},${mapState.h}`);
+            await sendCmd(`SET_GOAL=${mapState.cfg.gx},${mapState.cfg.gy},${mapState.cfg.gs}`);
+            if (mode === 1) await sendCmd('SET_MAX_CELLS=300');
+            await sendCmd(mode === 0 ? 'FF_ON' : 'FF_EXPLORE');
         }
 
         function mapReset() {
@@ -2039,6 +2023,7 @@
             mapState.h = parseInt(v) % 4;
             // Xe chưa đi ô nào: đặt lại tường ô xuất phát theo hướng mới
             if (mapState.x === mapState.sx && mapState.y === mapState.sy && mapState.trail.length <= 1) {
+                mapState.sh = mapState.h; // hướng ban đầu mới
                 for (let d = 0; d < 4; d++) delete mapState.walls[edgeKey(mapState.sx, mapState.sy, d)];
                 Object.assign(mapState.walls, mapStartWalls(mapState.h, mapState.sx, mapState.sy));
             }
@@ -2361,6 +2346,8 @@
             if (car) car.setAttribute('transform', `rotate(${yawFlip ? n : -n} 100 100)`);
             const t2 = document.getElementById('tab2Yaw');
             if (t2) t2.textContent = `${n.toFixed(1)}°`;
+            const t5 = document.getElementById('m5Yaw');
+            if (t5) t5.textContent = `${n.toFixed(1)}°`;
         }
 
         function yawSetFlip(v) {
@@ -2436,7 +2423,7 @@
                 if (data.l !== undefined) {
                     currentDL = data.l;
                     document.getElementById('distLeft').textContent = data.l;
-                    const wallLeft = (data.l > 20 && data.l < (data.wth || 230));
+                    const wallLeft = (data.l > 20 && data.l < (data.wth || 180));
                     const statusLeft = document.getElementById('statusWallLeft');
                     const barLeft = document.getElementById('wallLeftBar');
                     const distLBar = document.getElementById('distLeftBar');
@@ -2486,7 +2473,7 @@
                 if (data.r !== undefined) {
                     currentDR = data.r;
                     document.getElementById('distRight').textContent = data.r;
-                    const wallRight = (data.r > 20 && data.r < (data.wth || 230));
+                    const wallRight = (data.r > 20 && data.r < (data.wthr || 160));
                     const statusRight = document.getElementById('statusWallRight');
                     const barRight = document.getElementById('wallRightBar');
                     const distRBar = document.getElementById('distRightBar');
@@ -2594,7 +2581,14 @@
                     const t2Targ = document.getElementById('tab2TargetPulses');
                     if (t2Targ) t2Targ.textContent = data.ppc;
                 }
-                if (data.fspd !== undefined) syncBadge('FSPD', data.fspd);
+                if (data.fspd !== undefined) {
+                    syncBadge('FSPD', data.fspd);
+                    const s5 = document.getElementById('ff5Speed');
+                    if (s5 && document.activeElement !== s5 && Date.now() - (s5._touchedAt || 0) > 2000) {
+                        s5.value = data.fspd;
+                        document.getElementById('ff5SpeedBadge').textContent = data.fspd;
+                    }
+                }
 
                 // Cập nhật trạng thái và thanh tiến trình chạy 1 ô (Chế độ 2)
                 const isStep = (data.step === true || data.step === "true");
@@ -2652,7 +2646,8 @@
                 }
 
                 if (data.l !== undefined && data.f !== undefined && data.r !== undefined) {
-                    const wth = data.wth || 230;
+                    const wth = data.wth || 180;
+                    const wthr = data.wthr || 160;
                     const fst = data.fstop || 65;
                     const upd = (key, dist, isWall, isStop, maxMm) => {
                         const box = document.getElementById('m5Box' + key);
@@ -2666,7 +2661,7 @@
                         st.textContent = isStop ? 'SÁT TƯỜNG' : (isWall ? 'CÓ TƯỜNG' : 'TRỐNG');
                     };
                     upd('L', data.l, data.l > 20 && data.l < wth, false, 300);
-                    upd('R', data.r, data.r > 20 && data.r < wth, false, 300);
+                    upd('R', data.r, data.r > 20 && data.r < wthr, false, 300);
                     upd('F', data.f, data.f > 20 && data.f <= 180, data.f > 20 && data.f <= fst, 250);
                     const w1 = document.getElementById('m5Wth'); if (w1) w1.textContent = wth;
                     const w2 = document.getElementById('m5Fstop'); if (w2) w2.textContent = fst;
@@ -2678,7 +2673,7 @@
                         const wn = (data.f > 20 && data.f <= 180);
                         const wf = (!wn && data.f > 180 && data.f <= 360);
                         const wl = (data.l > 20 && data.l < wth);
-                        const wr = (data.r > 20 && data.r < wth);
+                        const wr = (data.r > 20 && data.r < wthr);
                         mapState.walls[edgeKey(x, y, h)] = wn ? 1 : 0;
                         if (!wn) {
                             const ax = x + DIR_DX[h], ay = y + DIR_DY[h];
@@ -2791,6 +2786,20 @@
 
             slider.value = val;
         }
+
+        // Chế độ 5: thanh tốc độ chạy (dùng chung SET_FSPD với chế độ 1, xe tự lưu flash)
+        (function () {
+            const s5 = document.getElementById('ff5Speed');
+            if (!s5) return;
+            let t = null;
+            s5.addEventListener('input', () => {
+                s5._touchedAt = Date.now();
+                document.getElementById('ff5SpeedBadge').textContent = s5.value;
+                updateBadge('FSPD', s5.value); // đồng bộ thanh trượt ở chế độ 1
+                clearTimeout(t);
+                t = setTimeout(() => sendCmd(`SET_FSPD=${s5.value}`), 250);
+            });
+        })();
 
         function applyParam(type) {
             const val = document.getElementById(`slider${type}`).value;

@@ -115,7 +115,8 @@ public:
   float targetLeftDist;
   float targetRightDist;
   float centerOffset;
-  uint16_t wallThreshold;
+  uint16_t wallThreshold;      // Tường TRÁI: dL < ngưỡng này là có tường (mm)
+  uint16_t rightWallThreshold; // Tường PHẢI: dR < ngưỡng này là có tường (mm)
   uint16_t frontStopDist;
   uint16_t frontWallDist; // dF <= ngưỡng này (mm) là có tường trước mặt
 
@@ -141,6 +142,9 @@ public:
   float wallDeadband; // Vùng chết khử nhiễu tâm ô (mm)
 
   void updateSensors();
+
+  // Lưu tốc độ chạy thẳng vào flash (NVS) -> giữ nguyên sau khi tắt/bật xe, dùng cho mọi chế độ
+  void saveForwardSpeed();
 
 private:
   float _targetYaw;

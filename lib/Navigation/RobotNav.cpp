@@ -1,4 +1,5 @@
 #include "RobotNav.h"
+#include <Preferences.h>
 
 RobotNav robotNav;
 
@@ -13,9 +14,10 @@ RobotNav::RobotNav()
   autoTestMode = false;
   pidRunActive = false;
 
-  leftCompensation = 22.0f;
-  rightCompensation = 22.0f;
-  turnSpeed = 70;
+  // Thông số quay đã căn ở Chế độ 1 - dùng chung cho mọi lần quay (chế độ 1, 2, bám tường, flood-fill)
+  leftCompensation = 5.0f;
+  rightCompensation = 6.0f;
+  turnSpeed = 65;
   baseForwardSpeed = 75;
   currentLeftSpeed = 0;
   currentRightSpeed = 0;
@@ -26,7 +28,8 @@ RobotNav::RobotNav()
   targetLeftDist = 171.0f;
   targetRightDist = 146.0f;
   centerOffset = 25.0f; // 171.0f - 146.0f = 25.0f
-  wallThreshold = 230; // Khoảng cách < 230mm là có tường, > 230mm là cửa trống
+  wallThreshold = 180;      // Tường TRÁI: dL < 180mm là có tường
+  rightWallThreshold = 160; // Tường PHẢI: dR < 160mm là có tường
   frontStopDist = 123; // Phanh dừng khi cách tường trước <= 123mm (tâm ô thực tế là 121mm)
   frontWallDist = 360; // dF <= 360mm: có tường trước của Ô PHÍA TRƯỚC (~300mm)
 
@@ -101,6 +104,15 @@ void RobotNav::init() {
   pinMode(M2_IN2, OUTPUT);
   stopMotors();
 
+  // Nạp tốc độ chạy thẳng đã lưu (chưa lưu lần nào -> giữ mặc định)
+  {
+    Preferences p;
+    if (p.begin("mmparams", true)) {
+      baseForwardSpeed = p.getUChar("fspd", baseForwardSpeed);
+      p.end();
+    }
+  }
+
   // Khởi tạo phần cứng Encoder đọc xung bánh xe
   setupEncoders();
   resetEnc();
@@ -135,6 +147,13 @@ void RobotNav::init() {
   } else {
     Serial.println("MPU6050 NOT FOUND @ 0x68");
   }
+}
+
+void RobotNav::saveForwardSpeed() {
+  Preferences p;
+  if (!p.begin("mmparams", false)) return;
+  p.putUChar("fspd", baseForwardSpeed);
+  p.end();
 }
 
 bool RobotNav::initVL53(VL53L0X &sensor, uint8_t xshutPin, uint8_t address,
@@ -326,7 +345,7 @@ void RobotNav::updateSensors() {
 
   // Nhận diện tường bên
   bool hasLeftWall = (leftReady && smoothDL > 20.0f && smoothDL < (float)wallThreshold);
-  bool hasRightWall = (rightReady && smoothDR > 20.0f && smoothDR < (float)wallThreshold);
+  bool hasRightWall = (rightReady && smoothDR > 20.0f && smoothDR < (float)rightWallThreshold);
 
   float raw_wall_error = 0.0f;
   if (hasLeftWall && hasRightWall) {
@@ -410,7 +429,7 @@ void RobotNav::updatePIDLoop() {
   }
 
   bool hasLeftWall = (leftReady && dL > 20 && dL < wallThreshold);
-  bool hasRightWall = (rightReady && dR > 20 && dR < wallThreshold);
+  bool hasRightWall = (rightReady && dR > 20 && dR < rightWallThreshold);
 
   // 1. Tính độ chênh lệch xung tức thời giữa 2 bánh trong chu kỳ này
   long curL = getLeftEncoder();
@@ -515,11 +534,11 @@ WallStatus RobotNav::senseCurrentWalls() {
     bool rightIsFrontReflection = (fabs(smoothDR - frontDiag) < 32.0f && smoothDR > 125.0f);
 
     walls.hasLeft  = leftReady && smoothDL > 20.0f && smoothDL < (float)wallThreshold && !leftIsFrontReflection;
-    walls.hasRight = rightReady && smoothDR > 20.0f && smoothDR < (float)wallThreshold && !rightIsFrontReflection;
+    walls.hasRight = rightReady && smoothDR > 20.0f && smoothDR < (float)rightWallThreshold && !rightIsFrontReflection;
   } else {
     // 2 Cảm biến 45° chĩa ra trước nhìn 2 bên sườn ô phía trước:
     walls.hasLeft  = (leftReady && smoothDL > 20.0f && smoothDL < (float)wallThreshold);
-    walls.hasRight = (rightReady && smoothDR > 20.0f && smoothDR < (float)wallThreshold);
+    walls.hasRight = (rightReady && smoothDR > 20.0f && smoothDR < (float)rightWallThreshold);
   }
   return walls;
 }
@@ -574,16 +593,16 @@ WallStatus RobotNav::moveOneCell(char turn) {
     if (stepTraveledPulses >= (long)(sideSampleFrac * pulsesPerCell) &&
         stepTraveledPulses <= (long)(0.75f * pulsesPerCell)) {
       if (leftReady) {
-        if (smoothDL > 215.0f) {
+        if (smoothDL >= (float)wallThreshold) {
           leftOpenCount++;
         } else if (smoothDL > 20.0f && smoothDL < (float)wallThreshold) {
           leftWallCount++;
         }
       }
       if (rightReady) {
-        if (smoothDR > 215.0f) {
+        if (smoothDR >= (float)rightWallThreshold) {
           rightOpenCount++;
-        } else if (smoothDR > 20.0f && smoothDR < (float)wallThreshold) {
+        } else if (smoothDR > 20.0f && smoothDR < (float)rightWallThreshold) {
           rightWallCount++;
         }
       }
@@ -601,7 +620,15 @@ WallStatus RobotNav::moveOneCell(char turn) {
   brakeMotors();
   stopPID();
   autoWallFollowActive = keepAuto; // stopPID() (kể cả trong updatePIDLoop) tắt cờ tự động -> khôi phục
-  delay(50);
+
+  // Đã dừng hẳn ở ô mới: chờ ~250ms cho cảm biến đọc lại vài lần (bộ lọc EMA ổn định)
+  // rồi mới đọc vách -> cập nhật lại tường của ô vừa tới bằng số đo lúc đứng yên.
+  unsigned long settle = millis();
+  while (millis() - settle < 250) {
+    updateSensors();
+    if (mpuReady) mpu6050.update();
+    delay(5);
+  }
 
   // Đã dừng ở tâm ô mới -> đọc vách của ô kế tiếp phía trước (look-ahead)
   WallStatus status = senseCurrentWalls();
@@ -823,7 +850,7 @@ static void ffSetWall(ParentMaze &m, int x, int y, int dir, bool wall, bool sure
 static void ffRecordAhead(ParentMaze &m, int x, int y, int h, const WallStatus &ws) {
   static const int DX[4] = {0, 1, 0, -1};
   static const int DY[4] = {1, 0, -1, 0};
-  ffSetWall(m, x, y, h, ws.hasFrontNear); // vách trước của ô hiện tại
+  ffSetWall(m, x, y, h, ws.hasFrontNear, true); // vách trước của ô đang đứng: đo lúc đứng yên -> ghi đè
   if (ws.hasFrontNear) return;            // bị chắn: không nhìn được ô phía trước
   int ax = x + DX[h], ay = y + DY[h];
   if (ax < 0 || ax >= MAZE_SIZE || ay < 0 || ay >= MAZE_SIZE) return;
@@ -835,7 +862,7 @@ static void ffRecordAhead(ParentMaze &m, int x, int y, int h, const WallStatus &
 
 void RobotNav::resetFloodFill(int x, int y, int h) {
   ffMaze.clear_mem();
-  startCellFresh = (x == 0 && y == 0); // ô (0,0) luôn có tường trái, phải, sau
+  startCellFresh = true; // ô xuất phát (bất kể toạ độ) luôn có tường trái, phải, sau theo hướng ban đầu
   x = constrain(x, 0, MAZE_SIZE - 1);
   y = constrain(y, 0, MAZE_SIZE - 1);
   ffX = x;
@@ -857,9 +884,10 @@ void RobotNav::startFloodFill(uint8_t mode) {
 
   if (!ffMaze.cell(ffX, ffY).run_visited) {
     WallStatus ws = senseCurrentWalls(); // vách của ô phía trước
-    if (startCellFresh) { // ô xuất phát: mặc định chỉ có 2 tường bên
+    if (startCellFresh) { // ô xuất phát: mặc định có tường trái, phải và SAU (theo hướng ban đầu ffH)
       ffSetWall(ffMaze, ffX, ffY, (ffH + 3) % 4, true);
       ffSetWall(ffMaze, ffX, ffY, (ffH + 1) % 4, true);
+      ffSetWall(ffMaze, ffX, ffY, (ffH + 2) % 4, true);
       ffMaze.cell(ffX, ffY).known = true;
     }
     ffMaze.cell(ffX, ffY).run_visited = true;
@@ -981,11 +1009,11 @@ void RobotNav::stepFloodFill() {
   ffY = next.y;
   // Cửa xe vừa bước qua luôn thông
   ffSetWall(ffMaze, ffX, ffY, (ffH + 2) % 4, false, true);
-  if (!ffMaze.cell(ffX, ffY).known) {
-    ffSetWall(ffMaze, ffX, ffY, (ffH + 3) % 4, curWalls.hasLeft);
-    ffSetWall(ffMaze, ffX, ffY, (ffH + 1) % 4, curWalls.hasRight);
-    ffMaze.cell(ffX, ffY).known = true;
-  }
+  // Đã tới ô này: CẬP NHẬT LẠI vách hông bằng số đo khi đi qua thân ô (ghi đè kết quả
+  // nhìn trước 1 ô lúc còn ở ô cũ), không còn chỉ ghi khi ô chưa biết.
+  ffSetWall(ffMaze, ffX, ffY, (ffH + 3) % 4, curWalls.hasLeft, true);
+  ffSetWall(ffMaze, ffX, ffY, (ffH + 1) % 4, curWalls.hasRight, true);
+  ffMaze.cell(ffX, ffY).known = true;
   ffMaze.cell(ffX, ffY).run_visited = true;
   ffRecordAhead(ffMaze, ffX, ffY, ffH, ws);
   autoCellCount++;

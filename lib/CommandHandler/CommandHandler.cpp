@@ -76,6 +76,7 @@ void CommandHandler::processBLECommands() {
     if (val >= 40 && val <= 255) {
       robotNav.turnSpeed = (uint8_t)val;
       robotNav.baseForwardSpeed = (uint8_t)val;
+      robotNav.saveForwardSpeed();
       bleManager.println(">> [BLE] CAP NHAT SPEED = " +
                          String(robotNav.turnSpeed));
     }
@@ -83,7 +84,8 @@ void CommandHandler::processBLECommands() {
     int val = cmd.substring(9).toInt();
     if (val >= 40 && val <= 255) {
       robotNav.baseForwardSpeed = (uint8_t)val;
-      bleManager.println(">> [BLE] CAP NHAT BASE_FORWARD_SPEED = " +
+      robotNav.saveForwardSpeed();
+      bleManager.println(">> [BLE] CAP NHAT BASE_FORWARD_SPEED (DA LUU) = " +
                          String(robotNav.baseForwardSpeed));
     }
   } else if (cmd.startsWith("SET_KP=")) {
@@ -184,6 +186,12 @@ void CommandHandler::processBLECommands() {
           robotNav.targetLeftDist - robotNav.targetRightDist;
       bleManager.println(">> [BLE] CAP NHAT TARGET_RIGHT_DIST = " +
                          String(val, 1));
+    }
+  } else if (cmd.startsWith("SET_WTHR=")) {
+    int val = cmd.substring(9).toInt();
+    if (val >= 100 && val <= 400) {
+      robotNav.rightWallThreshold = (uint16_t)val;
+      bleManager.println(">> [BLE] CAP NHAT RIGHT_WALL_THRESHOLD = " + String(val));
     }
   } else if (cmd.startsWith("SET_WTH=")) {
     int val = cmd.substring(8).toInt();
@@ -293,6 +301,7 @@ void CommandHandler::sendTelemetry() {
         ",\"tld\":" + String(robotNav.targetLeftDist, 1) +
         ",\"trd\":" + String(robotNav.targetRightDist, 1) +
         ",\"wth\":" + String(robotNav.wallThreshold) +
+        ",\"wthr\":" + String(robotNav.rightWallThreshold) +
         ",\"fstop\":" + String(robotNav.frontStopDist) +
         "}";
     bleManager.println(jsonMsg);

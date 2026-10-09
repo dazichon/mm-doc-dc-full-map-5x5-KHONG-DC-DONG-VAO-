@@ -26,4 +26,5 @@
 // ================= MPU6050 I2C ADDRESS =================
 #define MPU6050_ADDR 0x68
 
+#define BUTTON 0
 #endif

@@ -23,6 +23,7 @@ public:
     float getRelativeYaw() const;
     void setYawSetpoint();
     void resetYaw();
+    void setAutoBias(bool on) { _autoBias = on; _stillTime = 0.0f; } // tắt khi xe đang chạy
 
 private:
     uint8_t _addr;
@@ -31,6 +32,7 @@ private:
     float _pitch;
     float _yaw;
     float _yawSetpoint;
+    bool _autoBias = true;
     float _stillTime;   // thời gian liên tục gần như đứng yên (s)
     unsigned long _lastTime;
     

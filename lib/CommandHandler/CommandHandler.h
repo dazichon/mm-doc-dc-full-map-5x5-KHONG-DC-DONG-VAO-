@@ -2,7 +2,7 @@
 #define COMMAND_HANDLER_H
 
 #include <Arduino.h>
-#include "BLEManager.h"
+#include "SerialLink.h"
 #include "RobotNav.h"
 
 class CommandHandler {
@@ -10,7 +10,7 @@ public:
     CommandHandler();
 
     void update();
-    void processBLECommands();
+    void processSerialCommands();
     void sendTelemetry();
     void printStatus();
 

@@ -1,5 +1,5 @@
 #include "MPU6050.h"
-#include "BLEManager.h"
+#include "SerialLink.h"
 #include <math.h>
 
 // Các địa chỉ thanh ghi phần cứng MPU6050
@@ -101,8 +101,8 @@ void MPU6050::calibrate(int samples) {
     String calMsg = ">> GYRO CALIB: " + String(validSamples) + "/" + String(samples) +
                     " mau hop le | offset Z = " + String(_gyroZOffset, 3) + " do/s";
     Serial.println(calMsg);
-    if (bleManager.isConnected()) {
-        bleManager.println(calMsg);
+    if (serialLink.isConnected()) {
+        serialLink.println(calMsg);
     }
     _roll = 0.0;
     _pitch = 0.0;
@@ -134,7 +134,7 @@ void MPU6050::update() {
 
     // Tự bù trôi (drift): nếu gyro gần như đứng yên liên tục > 0.4s thì offset đang lệch
     // nhẹ do nhiệt độ -> kéo offset về giá trị đo được rất chậm.
-    if (fabsf(residual) < 1.5f) {
+    if (_autoBias && fabsf(residual) < 1.5f) {
         _stillTime += dt;
         if (_stillTime > 0.4f) {
             _gyroZOffset += residual * 0.02f;
@@ -174,12 +174,12 @@ bool MPU6050::rotateToAngle(float targetAngle, uint8_t m1In1, uint8_t m1In2,
                       " | Can quay = " + String(effectiveAngle, 2) +
                       " do | Toc do PWM = " + String(turnSpeed);
     Serial.println(startMsg);
-    if (bleManager.isConnected()) {
-        bleManager.println(startMsg);
+    if (serialLink.isConnected()) {
+        serialLink.println(startMsg);
         String jsonStart = "{\"type\":\"turn_start\",\"start\":" + String(startAngle, 2) +
                            ",\"effective\":" + String(effectiveAngle, 2) +
                            ",\"spd\":" + String(turnSpeed) + "}";
-        bleManager.println(jsonStart);
+        serialLink.println(jsonStart);
     }
 
     // Điều khiển động cơ quay theo tốc độ PWM:
@@ -254,13 +254,13 @@ bool MPU6050::rotateToAngle(float targetAngle, uint8_t m1In1, uint8_t m1In2,
                     " do | Goc hien tai (da reset) = " + String(_yaw, 2) +
                     (reachedTarget ? " (THANH CONG)" : " (TIMEOUT - KET BANH HOAC LOI DOC GYRO)");
     Serial.println(resMsg);
-    if (bleManager.isConnected()) {
-        bleManager.println(resMsg);
+    if (serialLink.isConnected()) {
+        serialLink.println(resMsg);
         String jsonRes = "{\"type\":\"turn_res\",\"target\":" + String(fabs(targetAngle), 1) +
                          ",\"turned\":" + String(turnedTotal, 2) +
                          ",\"yaw\":" + String(_yaw, 2) +
                          ",\"success\":" + String(reachedTarget ? "true" : "false") + "}";
-        bleManager.println(jsonRes);
+        serialLink.println(jsonRes);
     }
 
     return reachedTarget;
